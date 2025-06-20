@@ -2,12 +2,12 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <cmath>
 
 Renderer::Renderer(int w, int h) : width(w), height(h) {
     frameBuffer.resize(width * height);
     depthBuffer.resize(width * height);
     
-    // 初始化光照
     lightDir = Vec3f(0, 1, 0);
     lightColor = Vec3f(1, 1, 1);
     ambientIntensity = 0.2f;
@@ -37,24 +37,28 @@ void Renderer::renderModel(const Model& model) {
 }
 
 void Renderer::renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& v2) {
-    // 顶点着色器
     ShaderVertex sv0 = vertexShader(v0);
     ShaderVertex sv1 = vertexShader(v1);
     ShaderVertex sv2 = vertexShader(v2);
     
-    // 正面剔除
-    if (!isFrontFace(sv0.position, sv1.position, sv2.position)) {
+    // Convert to view space for proper face culling
+    Vec3f worldPos0 = modelMatrix * v0.position;
+    Vec3f worldPos1 = modelMatrix * v1.position;
+    Vec3f worldPos2 = modelMatrix * v2.position;
+    Vec3f viewPos0 = viewMatrix * worldPos0;
+    Vec3f viewPos1 = viewMatrix * worldPos1;
+    Vec3f viewPos2 = viewMatrix * worldPos2;
+    
+    if (!isFrontFace(viewPos0, viewPos1, viewPos2)) {
         return;
     }
     
-    // 光栅化
     rasterizeTriangle(sv0, sv1, sv2);
 }
 
 Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
     ShaderVertex result;
     
-    // 应用变换矩阵
     Vec3f worldPos = modelMatrix * vertex.position;
     Vec3f viewPos = viewMatrix * worldPos;
     Vec3f clipPos = projectionMatrix * viewPos;
@@ -71,19 +75,16 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
 Color Renderer::fragmentShader(const ShaderFragment& fragment) {
     Vec3f baseColor(1, 1, 1);
     
-    // 纹理采样
     if (currentTexture && currentTexture->isValid()) {
         baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
     }
     
-    // 光照计算
     Vec3f finalColor = calculateLighting(fragment.normal, fragment.worldPos, baseColor);
     
     return Color::fromVec3f(finalColor);
 }
 
 void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
-    // 转换为屏幕坐标
     int x0 = static_cast<int>(v0.position.x);
     int y0 = static_cast<int>(v0.position.y);
     int x1 = static_cast<int>(v1.position.x);
@@ -91,37 +92,31 @@ void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1,
     int x2 = static_cast<int>(v2.position.x);
     int y2 = static_cast<int>(v2.position.y);
     
-    // 计算包围盒
     int minX = std::max(0, std::min({x0, x1, x2}));
     int maxX = std::min(width - 1, std::max({x0, x1, x2}));
     int minY = std::max(0, std::min({y0, y1, y2}));
     int maxY = std::min(height - 1, std::max({y0, y1, y2}));
     
-    // 计算重心坐标
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
-            Vec3f bary = barycentric(Vec2f(x0, y0), Vec2f(x1, y1), Vec2f(x2, y2), Vec2f(x, y));
+            Vec3f bary = barycentric(Vec2f(static_cast<float>(x0), static_cast<float>(y0)), 
+                                   Vec2f(static_cast<float>(x1), static_cast<float>(y1)), 
+                                   Vec2f(static_cast<float>(x2), static_cast<float>(y2)), 
+                                   Vec2f(static_cast<float>(x), static_cast<float>(y)));
             
             if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
-                // 插值深度
                 float depth = bary.x * v0.position.z + bary.y * v1.position.z + bary.z * v2.position.z;
                 
                 if (depthTest(x, y, depth)) {
-                    // 插值其他属性
                     ShaderFragment fragment;
-                    fragment.position = Math::lerp(v0.position, v1.position, bary.y) + 
-                                      Math::lerp(v0.position, v2.position, bary.z);
-                    fragment.normal = Math::lerp(v0.normal, v1.normal, bary.y) + 
-                                     Math::lerp(v0.normal, v2.normal, bary.z);
-                    fragment.texCoord = Math::lerp(v0.texCoord, v1.texCoord, bary.y) + 
-                                       Math::lerp(v0.texCoord, v2.texCoord, bary.z);
-                    fragment.worldPos = Math::lerp(v0.worldPos, v1.worldPos, bary.y) + 
-                                       Math::lerp(v0.worldPos, v2.worldPos, bary.z);
+                    // 使用正确的重心坐标插值
+                    fragment.position = v0.position * bary.x + v1.position * bary.y + v2.position * bary.z;
+                    fragment.normal = v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z;
+                    fragment.texCoord = v0.texCoord * bary.x + v1.texCoord * bary.y + v2.texCoord * bary.z;
+                    fragment.worldPos = v0.worldPos * bary.x + v1.worldPos * bary.y + v2.worldPos * bary.z;
                     
-                    // 标准化法向量
                     fragment.normal = fragment.normal.normalize();
                     
-                    // 片段着色器
                     Color color = fragmentShader(fragment);
                     setPixel(x, y, color, depth);
                 }
@@ -142,6 +137,10 @@ Vec3f Renderer::barycentric(const Vec2f& a, const Vec2f& b, const Vec2f& c, cons
     float d21 = v2.dot(v1);
     
     float denom = d00 * d11 - d01 * d01;
+    if (std::abs(denom) < 1e-6f) {
+        return Vec3f(1, 0, 0);
+    }
+    
     float v = (d11 * d20 - d01 * d21) / denom;
     float w = (d00 * d21 - d01 * d20) / denom;
     float u = 1.0f - v - w;
@@ -169,10 +168,8 @@ void Renderer::setPixel(int x, int y, const Color& color, float depth) {
 }
 
 Vec3f Renderer::calculateLighting(const Vec3f& normal, const Vec3f& worldPos, const Vec3f& baseColor) {
-    // 环境光
     Vec3f ambient = baseColor * ambientIntensity;
     
-    // 漫反射
     float diffuseIntensity = std::max(0.0f, normal.dot(lightDir));
     Vec3f diffuse = baseColor * lightColor * diffuseIntensity;
     
@@ -184,8 +181,9 @@ bool Renderer::isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2) {
     Vec3f edge2 = v2 - v0;
     Vec3f normal = edge1.cross(edge2);
     
-    // 检查法向量是否朝向摄像机
-    return normal.z > 0;
+    // In view space, camera looks down negative Z axis
+    // Front faces have normals pointing towards camera (negative Z)
+    return normal.z < 0;
 }
 
 const std::vector<Color>& Renderer::getColorBuffer() const {

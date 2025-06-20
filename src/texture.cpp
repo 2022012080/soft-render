@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 bool Texture::loadFromFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::binary);
@@ -29,11 +30,18 @@ void Texture::createDefault(int w, int h) {
     height = h;
     pixels.resize(width * height);
     
-    // 创建棋盘格纹理
+    // 创建简单的渐变纹理，避免棋盘格插值问题
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            bool checker = ((x / 32) + (y / 32)) % 2 == 0;
-            Color color = checker ? Color(255, 255, 255) : Color(128, 128, 128);
+            // 简单的径向渐变
+            float centerX = w / 2.0f;
+            float centerY = h / 2.0f;
+            float distance = std::sqrt((x - centerX) * (x - centerX) + (y - centerY) * (y - centerY));
+            float maxDistance = std::sqrt(centerX * centerX + centerY * centerY);
+            float intensity = 1.0f - (distance / maxDistance) * 0.5f;
+            
+            unsigned char value = static_cast<unsigned char>(intensity * 255);
+            Color color(value, value, value);
             setPixel(x, y, color);
         }
     }
