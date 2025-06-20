@@ -6,7 +6,7 @@ if not exist build mkdir build
 cd build
 
 echo 配置项目...
-cmake .. -G "Visual Studio 16 2019" -A x64
+cmake .. -G "Visual Studio 17 2022" -A x64
 if errorlevel 1 (
     echo CMake配置失败！
     pause
