@@ -9,6 +9,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_renderWidth(600), m_renderHeight(450)
     , m_cameraX(0.0f), m_cameraY(0.0f), m_cameraZ(5.0f)
     , m_rotationX(0.0f), m_rotationY(30.0f)
+    , m_lightX(3.0f), m_lightY(3.0f), m_lightZ(3.0f), m_lightIntensity(10.0f)
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
 {
@@ -117,6 +118,26 @@ void RenderWindow::CreateControls() {
     m_rotationYEdit = CreateWindowA("EDIT", "30", WS_VISIBLE | WS_CHILD | WS_BORDER,
         700, 115, 70, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
     
+    // Light controls
+    CreateWindowA("STATIC", "Light Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
+        620, 160, 160, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_lightXEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        620, 185, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
+    
+    m_lightYEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        680, 185, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
+    
+    m_lightZEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        740, 185, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
+    
+    // Light intensity control
+    CreateWindowA("STATIC", "Light Intensity:", WS_VISIBLE | WS_CHILD,
+        620, 230, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_lightIntensityEdit = CreateWindowA("EDIT", "10", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        620, 255, 70, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
+    
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
         10, 10, m_renderWidth, m_renderHeight, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
@@ -162,6 +183,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnCameraChanged();
             } else if (controlId >= ID_ROTATION_X && controlId <= ID_ROTATION_Y) {
                 OnRotationChanged();
+            } else if (controlId >= ID_LIGHT_X && controlId <= ID_LIGHT_INTENSITY) {
+                OnLightChanged();
             }
         }
         return 0;
@@ -218,6 +241,25 @@ void RenderWindow::OnRotationChanged() {
     UpdateRender();
 }
 
+void RenderWindow::OnLightChanged() {
+    // Get light values from edit controls
+    char buffer[32];
+    
+    GetWindowTextA(m_lightXEdit, buffer, sizeof(buffer));
+    m_lightX = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_lightYEdit, buffer, sizeof(buffer));
+    m_lightY = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_lightZEdit, buffer, sizeof(buffer));
+    m_lightZ = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_lightIntensityEdit, buffer, sizeof(buffer));
+    m_lightIntensity = static_cast<float>(atof(buffer));
+    
+    UpdateRender();
+}
+
 void RenderWindow::UpdateRender() {
     // Set up matrices
     Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(0, 0, -5)) * 
@@ -246,8 +288,9 @@ void RenderWindow::UpdateRender() {
     m_renderer->setProjectionMatrix(projectionMatrix);
     m_renderer->setViewportMatrix(viewportMatrix);
     
-    m_renderer->setLightDirection(Vec3f(1, 1, 1));
+    m_renderer->setLightPosition(Vec3f(m_lightX, m_lightY, m_lightZ));
     m_renderer->setLightColor(Vec3f(1, 1, 1));
+    m_renderer->setLightIntensity(m_lightIntensity);
     m_renderer->setAmbientIntensity(0.3f);
     
     // Clear and render

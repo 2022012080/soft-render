@@ -76,6 +76,44 @@ namespace VectorMath {
         return result;
     }
     
+    Matrix4x4 transpose(const Matrix4x4& m) {
+        Matrix4x4 result;
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                result(i, j) = m(j, i);
+            }
+        }
+        return result;
+    }
+    
+    Matrix4x4 inverse(const Matrix4x4& m) {
+        // 简化版本：对于仅包含旋转和平移的矩阵
+        // 对于更复杂的情况，需要完整的高斯消元法
+        Matrix4x4 result;
+        
+        // 提取3x3旋转部分的转置（即逆）
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result(i, j) = m(j, i);
+            }
+        }
+        
+        // 计算平移部分的逆
+        Vec3f translation(-m(0, 3), -m(1, 3), -m(2, 3));
+        Vec3f invTranslation(
+            result(0, 0) * translation.x + result(0, 1) * translation.y + result(0, 2) * translation.z,
+            result(1, 0) * translation.x + result(1, 1) * translation.y + result(1, 2) * translation.z,
+            result(2, 0) * translation.x + result(2, 1) * translation.y + result(2, 2) * translation.z
+        );
+        
+        result(0, 3) = invTranslation.x;
+        result(1, 3) = invTranslation.y;
+        result(2, 3) = invTranslation.z;
+        result(3, 3) = 1.0f;
+        
+        return result;
+    }
+    
     float clamp(float value, float min, float max) {
         return std::min(std::max(value, min), max);
     }

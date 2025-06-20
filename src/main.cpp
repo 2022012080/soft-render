@@ -11,7 +11,7 @@
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     std::cout << "软光栅渲染器启动中..." << std::endl;
     
-    RenderWindow window(820, 500);
+    RenderWindow window(820, 600);
     
     if (!window.Initialize()) {
         std::cerr << "窗口初始化失败!" << std::endl;

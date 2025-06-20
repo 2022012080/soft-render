@@ -8,9 +8,14 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     frameBuffer.resize(width * height);
     depthBuffer.resize(width * height);
     
-    lightDir = Vec3f(0, 1, 0);
+    // 初始化点光源参数
+    lightPosition = Vec3f(3, 3, 3);
     lightColor = Vec3f(1, 1, 1);
+    lightIntensity = 10.0f;
     ambientIntensity = 0.2f;
+    
+    // 初始化法向量变换矩阵
+    updateNormalMatrix();
 }
 
 void Renderer::clear(const Color& color) {
@@ -64,8 +69,11 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
     Vec3f clipPos = projectionMatrix * viewPos;
     Vec3f screenPos = viewportMatrix * clipPos;
     
+    // 变换法向量 - 使用法向量变换矩阵
+    Vec3f transformedNormal = normalMatrix * vertex.normal;
+    
     result.position = screenPos;
-    result.normal = vertex.normal;
+    result.normal = transformedNormal.normalize();
     result.texCoord = vertex.texCoord;
     result.worldPos = worldPos;
     
@@ -168,12 +176,28 @@ void Renderer::setPixel(int x, int y, const Color& color, float depth) {
 }
 
 Vec3f Renderer::calculateLighting(const Vec3f& normal, const Vec3f& worldPos, const Vec3f& baseColor) {
+    // 环境光
     Vec3f ambient = baseColor * ambientIntensity;
     
-    float diffuseIntensity = std::max(0.0f, normal.dot(lightDir));
-    Vec3f diffuse = baseColor * lightColor * diffuseIntensity;
+    // 计算从光源到表面的向量
+    Vec3f lightVector = lightPosition - worldPos;
+    float distance = lightVector.length();
+    Vec3f lightDir = lightVector.normalize();
     
-    return ambient + diffuse;
+    // 计算衰减（距离的平方衰减）
+    float attenuation = lightIntensity / (1.0f + 0.1f * distance + 0.01f * distance * distance);
+    
+    // 漫反射光照（Lambert模型）
+    float diffuseStrength = std::max(0.0f, normal.dot(lightDir));
+    Vec3f diffuse = baseColor * lightColor * diffuseStrength * attenuation;
+    
+    // 简单的镜面反射光照（Phong模型）
+    Vec3f viewDir = Vec3f(0, 0, 1); // 假设摄像机朝向-Z
+    Vec3f reflectDir = normal * (2.0f * normal.dot(lightDir)) - lightDir;
+    float specularStrength = std::pow(std::max(0.0f, viewDir.dot(reflectDir)), 32.0f);
+    Vec3f specular = lightColor * specularStrength * attenuation * 0.5f;
+    
+    return ambient + diffuse + specular;
 }
 
 bool Renderer::isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2) {
@@ -259,4 +283,10 @@ bool Renderer::saveImage(const std::string& filename) const {
     
     file.close();
     return true;
+}
+
+void Renderer::updateNormalMatrix() {
+    // 法向量变换矩阵是模型矩阵的逆转置矩阵
+    // 对于仅包含旋转和均匀缩放的变换，可以直接使用模型矩阵的3x3部分
+    normalMatrix = VectorMath::transpose(VectorMath::inverse(modelMatrix));
 } 
