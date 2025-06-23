@@ -76,6 +76,8 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
     result.normal = transformedNormal.normalize();
     result.texCoord = vertex.texCoord;
     result.worldPos = worldPos;
+    result.localPos = vertex.position;        // 新增：保存本地坐标位置
+    result.localNormal = vertex.normal;       // 新增：保存本地坐标法向量
     
     return result;
 }
@@ -87,7 +89,7 @@ Color Renderer::fragmentShader(const ShaderFragment& fragment) {
         baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
     }
     
-    Vec3f finalColor = calculateLighting(fragment.normal, fragment.worldPos, baseColor);
+    Vec3f finalColor = calculateLighting(fragment.localPos, fragment.localNormal, baseColor);
     
     return Color::fromVec3f(finalColor);
 }
@@ -122,8 +124,11 @@ void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1,
                     fragment.normal = v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z;
                     fragment.texCoord = v0.texCoord * bary.x + v1.texCoord * bary.y + v2.texCoord * bary.z;
                     fragment.worldPos = v0.worldPos * bary.x + v1.worldPos * bary.y + v2.worldPos * bary.z;
+                    fragment.localPos = v0.localPos * bary.x + v1.localPos * bary.y + v2.localPos * bary.z;
+                    fragment.localNormal = v0.localNormal * bary.x + v1.localNormal * bary.y + v2.localNormal * bary.z;
                     
                     fragment.normal = fragment.normal.normalize();
+                    fragment.localNormal = fragment.localNormal.normalize();
                     
                     Color color = fragmentShader(fragment);
                     setPixel(x, y, color, depth);
@@ -175,27 +180,35 @@ void Renderer::setPixel(int x, int y, const Color& color, float depth) {
     frameBuffer[index].depth = depth;
 }
 
-Vec3f Renderer::calculateLighting(const Vec3f& normal, const Vec3f& worldPos, const Vec3f& baseColor) {
-    // 环境光
-    Vec3f ambient = baseColor * ambientIntensity;
+Vec3f Renderer::calculateLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
+    // 环境光 - 增强强度，让场景更明亮
+    Vec3f ambient = baseColor * (ambientIntensity * 0.6f); // 提高到60%
     
-    // 计算从光源到表面的向量
-    Vec3f lightVector = lightPosition - worldPos;
+    // 在本地坐标系中计算光照（光源位置和表面位置都是本地坐标）
+    Vec3f lightVector = lightPosition - localPos;
     float distance = lightVector.length();
     Vec3f lightDir = lightVector.normalize();
     
     // 计算衰减（距离的平方衰减）
     float attenuation = lightIntensity / (1.0f + 0.1f * distance + 0.01f * distance * distance);
     
-    // 漫反射光照（Lambert模型）
-    float diffuseStrength = std::max(0.0f, normal.dot(lightDir));
+    // 漫反射光照（Lambert模型） - 使用本地坐标系的法向量
+    float diffuseStrength = std::max(0.0f, localNormal.dot(lightDir));
     Vec3f diffuse = baseColor * lightColor * diffuseStrength * attenuation;
     
-    // 简单的镜面反射光照（Phong模型）
-    Vec3f viewDir = Vec3f(0, 0, 1); // 假设摄像机朝向-Z
-    Vec3f reflectDir = normal * (2.0f * normal.dot(lightDir)) - lightDir;
-    float specularStrength = std::pow(std::max(0.0f, viewDir.dot(reflectDir)), 32.0f);
-    Vec3f specular = lightColor * specularStrength * attenuation * 0.5f;
+    // 高光计算 - 只有当表面面向光源时才计算
+    Vec3f specular(0, 0, 0);
+    if (diffuseStrength > 0.0f) {  // 只有面向光源的表面才有高光
+        // 计算视角方向 - 在本地坐标系中，摄像机位置需要变换
+        Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
+        Vec3f localCameraPos = invModelMatrix * Vec3f(0, 0, 5);
+        Vec3f viewDir = (localCameraPos - localPos).normalize();
+        
+        // 镜面反射光照（Phong模型）
+        Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;
+        float specularStrength = std::pow(std::max(0.0f, viewDir.dot(reflectDir)), 32.0f);
+        specular = lightColor * specularStrength * attenuation * 0.5f;
+    }
     
     return ambient + diffuse + specular;
 }
@@ -289,4 +302,253 @@ void Renderer::updateNormalMatrix() {
     // 法向量变换矩阵是模型矩阵的逆转置矩阵
     // 对于仅包含旋转和均匀缩放的变换，可以直接使用模型矩阵的3x3部分
     normalMatrix = VectorMath::transpose(VectorMath::inverse(modelMatrix));
+}
+
+// 绘制线段 - 使用Bresenham算法
+void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color, float width) {
+    // 将3D点转换到屏幕坐标
+    Vec3f worldStart = modelMatrix * start;
+    Vec3f worldEnd = modelMatrix * end;
+    Vec3f viewStart = viewMatrix * worldStart;
+    Vec3f viewEnd = viewMatrix * worldEnd;
+    Vec3f clipStart = projectionMatrix * viewStart;
+    Vec3f clipEnd = projectionMatrix * viewEnd;
+    Vec3f screenStart = viewportMatrix * clipStart;
+    Vec3f screenEnd = viewportMatrix * clipEnd;
+    
+    int x0 = static_cast<int>(screenStart.x);
+    int y0 = static_cast<int>(screenStart.y);
+    int x1 = static_cast<int>(screenEnd.x);
+    int y1 = static_cast<int>(screenEnd.y);
+    float z0 = screenStart.z;
+    float z1 = screenEnd.z;
+    
+    // Bresenham直线算法
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+    
+    int x = x0, y = y0;
+    float totalDistance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+    
+    while (true) {
+        // 计算当前点的深度值
+        float currentDistance = std::sqrt(static_cast<float>((x - x0) * (x - x0) + (y - y0) * (y - y0)));
+        float t = (totalDistance > 0) ? (currentDistance / totalDistance) : 0;
+        float z = VectorMath::lerp(z0, z1, t);
+        
+        // 绘制像素（考虑线宽）
+        int halfWidth = static_cast<int>(width / 2);
+        for (int dx_offset = -halfWidth; dx_offset <= halfWidth; dx_offset++) {
+            for (int dy_offset = -halfWidth; dy_offset <= halfWidth; dy_offset++) {
+                int px = x + dx_offset;
+                int py = y + dy_offset;
+                if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+                    if (depthTest(px, py, z)) {
+                        // 如果颜色有alpha通道，进行alpha混合
+                        if (color.a < 255) {
+                            int index = py * this->width + px;
+                            Color existingColor = frameBuffer[index].color;
+                            
+                            float alpha = color.a / 255.0f;
+                            Color blendedColor(
+                                static_cast<unsigned char>(color.r * alpha + existingColor.r * (1.0f - alpha)),
+                                static_cast<unsigned char>(color.g * alpha + existingColor.g * (1.0f - alpha)),
+                                static_cast<unsigned char>(color.b * alpha + existingColor.b * (1.0f - alpha)),
+                                255
+                            );
+                            setPixel(px, py, blendedColor, z);
+                        } else {
+                            setPixel(px, py, color, z);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (x == x1 && y == y1) break;
+        
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+// 绘制坐标轴
+void Renderer::drawAxes(float length) {
+    Vec3f origin(0, 0, 0);
+    
+    // X轴 - 红色
+    Vec3f xEnd(length, 0, 0);
+    drawLine(origin, xEnd, Color(255, 0, 0), 2.0f);
+    
+    // Y轴 - 绿色
+    Vec3f yEnd(0, length, 0);
+    drawLine(origin, yEnd, Color(0, 255, 0), 2.0f);
+    
+    // Z轴 - 蓝色
+    Vec3f zEnd(0, 0, length);
+    drawLine(origin, zEnd, Color(0, 0, 255), 2.0f);
+    
+    // 在原点绘制一个小球表示原点
+    Vec3f worldOrigin = modelMatrix * origin;
+    Vec3f viewOrigin = viewMatrix * worldOrigin;
+    Vec3f clipOrigin = projectionMatrix * viewOrigin;
+    Vec3f screenOrigin = viewportMatrix * clipOrigin;
+    
+    int ox = static_cast<int>(screenOrigin.x);
+    int oy = static_cast<int>(screenOrigin.y);
+    float oz = screenOrigin.z;
+    
+    // 绘制原点标记（小圆圈）
+    for (int dx = -3; dx <= 3; dx++) {
+        for (int dy = -3; dy <= 3; dy++) {
+            if (dx * dx + dy * dy <= 9) { // 半径为3的圆
+                int px = ox + dx;
+                int py = oy + dy;
+                if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+                    if (depthTest(px, py, oz)) {
+                        setPixel(px, py, Color(255, 255, 255), oz);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 绘制网格
+void Renderer::drawGrid(float size, int divisions) {
+    float step = size / divisions;
+    Color gridColor(128, 128, 128, 128); // 半透明灰色
+    
+    // 绘制平行于X轴的线（在XY平面上）
+    for (int i = -divisions; i <= divisions; i++) {
+        float z = i * step;
+        Vec3f start(-size, 0, z);
+        Vec3f end(size, 0, z);
+        drawLine(start, end, gridColor, 1.0f);
+    }
+    
+    // 绘制平行于Z轴的线（在XY平面上）
+    for (int i = -divisions; i <= divisions; i++) {
+        float x = i * step;
+        Vec3f start(x, 0, -size);
+        Vec3f end(x, 0, size);
+        drawLine(start, end, gridColor, 1.0f);
+    }
+}
+
+// 绘制光源位置
+void Renderer::drawLightPosition() {
+    // 将光源位置从本地坐标系变换到世界坐标系
+    Vec3f worldLightPos = modelMatrix * lightPosition;
+    
+    // 将世界坐标的光源位置转换到屏幕坐标
+    Vec3f viewLightPos = viewMatrix * worldLightPos;
+    Vec3f clipLightPos = projectionMatrix * viewLightPos;
+    Vec3f screenLightPos = viewportMatrix * clipLightPos;
+    
+    int lx = static_cast<int>(screenLightPos.x);
+    int ly = static_cast<int>(screenLightPos.y);
+    float lz = screenLightPos.z;
+    
+    // 绘制光源标记（白色圆圈，比原点标记稍大）
+    Color lightColor(255, 255, 255); // 白色
+    int radius = 5; // 半径为5像素
+    
+    for (int dx = -radius; dx <= radius; dx++) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            float distance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+            if (distance <= radius) {
+                int px = lx + dx;
+                int py = ly + dy;
+                if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+                    if (depthTest(px, py, lz)) {
+                        // 根据距离中心的远近调整亮度，创造渐变效果
+                        float alpha = 1.0f - (distance / radius);
+                        Color pixelColor(
+                            static_cast<unsigned char>(255 * alpha),
+                            static_cast<unsigned char>(255 * alpha),
+                            static_cast<unsigned char>(255 * alpha)
+                        );
+                        setPixel(px, py, pixelColor, lz);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 在光源周围绘制一个小的十字标记，便于识别
+    for (int i = -8; i <= 8; i++) {
+        // 水平线
+        int px = lx + i;
+        int py = ly;
+        if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+            if (depthTest(px, py, lz)) {
+                setPixel(px, py, lightColor, lz);
+            }
+        }
+        
+        // 垂直线
+        px = lx;
+        py = ly + i;
+        if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+            if (depthTest(px, py, lz)) {
+                setPixel(px, py, lightColor, lz);
+            }
+        }
+    }
+}
+
+// 绘制光线到模型顶点
+void Renderer::drawLightRays(const Model& model) {
+    const auto& vertices = model.getVertices();
+    Color rayColor(255, 255, 150, 100); // 半透明浅黄色
+    
+    // 直接使用本地坐标系中的光源位置
+    Vec3f localLightPos = lightPosition;
+    
+    // 遍历所有顶点，绘制从本地光源到每个顶点的连线
+    std::vector<Vec3f> uniquePositions;
+    
+    // 收集唯一的顶点位置（避免重复绘制到同一个位置的光线）
+    for (const auto& vertex : vertices) {
+        // 使用模型本地坐标的顶点位置
+        Vec3f localVertexPos = vertex.position;
+        
+        // 检查是否已经有相同位置的顶点
+        bool isDuplicate = false;
+        for (const auto& pos : uniquePositions) {
+            Vec3f diff = localVertexPos - pos;
+            if (diff.length() < 0.01f) { // 如果距离小于0.01，认为是重复顶点
+                isDuplicate = true;
+                break;
+            }
+        }
+        
+        if (!isDuplicate) {
+            uniquePositions.push_back(localVertexPos);
+        }
+    }
+    
+    // 绘制从本地光源到每个唯一顶点位置的光线
+    for (const auto& vertexPos : uniquePositions) {
+        // 计算光线方向
+        Vec3f lightToVertex = vertexPos - localLightPos;
+        float distance = lightToVertex.length();
+        
+        // 只绘制一定距离内的光线，避免过长的线条
+        if (distance < 10.0f) {
+            // 在本地坐标系中绘制光线，drawLine会自动应用modelMatrix变换
+            drawLine(localLightPos, vertexPos, rayColor, 1.0f);
+        }
+    }
 } 

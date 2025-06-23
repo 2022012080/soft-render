@@ -3,12 +3,15 @@
 #include <commctrl.h>
 #include <iostream>
 #include <sstream>
+#include <cmath>
 
 RenderWindow::RenderWindow(int width, int height) 
     : m_windowWidth(width), m_windowHeight(height)
     , m_renderWidth(600), m_renderHeight(450)
     , m_cameraX(0.0f), m_cameraY(0.0f), m_cameraZ(5.0f)
-    , m_rotationX(0.0f), m_rotationY(30.0f)
+    , m_rotationX(0.0f), m_rotationY(30.0f), m_rotationZ(0.0f)
+    , m_cameraRollX(0.0f), m_cameraRollY(0.0f), m_cameraRollZ(0.0f)
+    , m_fov(20.0f)  // 初始FOV为20度
     , m_lightX(3.0f), m_lightY(3.0f), m_lightZ(3.0f), m_lightIntensity(10.0f)
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
@@ -95,48 +98,74 @@ bool RenderWindow::Initialize() {
 }
 
 void RenderWindow::CreateControls() {
-    // Camera controls
+    // Camera controls - 增加标签宽度和控件间距
     CreateWindowA("STATIC", "Camera Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        620, 20, 160, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        620, 20, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_cameraXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 45, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_X, GetModuleHandle(nullptr), nullptr);
+        620, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_X, GetModuleHandle(nullptr), nullptr);
     
     m_cameraYEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        680, 45, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Y, GetModuleHandle(nullptr), nullptr);
+        690, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Y, GetModuleHandle(nullptr), nullptr);
     
     m_cameraZEdit = CreateWindowA("EDIT", "5", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        740, 45, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Z, GetModuleHandle(nullptr), nullptr);
+        760, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Z, GetModuleHandle(nullptr), nullptr);
     
-    // Rotation controls
-    CreateWindowA("STATIC", "Rotation (Horizontal, Vertical):", WS_VISIBLE | WS_CHILD,
-        620, 90, 160, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Rotation controls - 增加间距
+    CreateWindowA("STATIC", "Model Rotation (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
+        620, 80, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_rotationXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 115, 70, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_X, GetModuleHandle(nullptr), nullptr);
+        620, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_X, GetModuleHandle(nullptr), nullptr);
     
     m_rotationYEdit = CreateWindowA("EDIT", "30", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        700, 115, 70, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
+        690, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
     
-    // Light controls
+    m_rotationZEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        760, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Z, GetModuleHandle(nullptr), nullptr);
+    
+    // Camera roll control - XYZ三个轴的旋转
+    CreateWindowA("STATIC", "Camera Roll (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
+        620, 140, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_cameraRollXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        620, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_X, GetModuleHandle(nullptr), nullptr);
+    
+    m_cameraRollYEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        690, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Y, GetModuleHandle(nullptr), nullptr);
+    
+    m_cameraRollZEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        760, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Z, GetModuleHandle(nullptr), nullptr);
+    
+    // Light controls - 增加间距
     CreateWindowA("STATIC", "Light Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        620, 160, 160, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        620, 200, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_lightXEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 185, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
+        620, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
     
     m_lightYEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        680, 185, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
+        690, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
     
     m_lightZEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        740, 185, 50, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
+        760, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
     
     // Light intensity control
     CreateWindowA("STATIC", "Light Intensity:", WS_VISIBLE | WS_CHILD,
-        620, 230, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        620, 260, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_lightIntensityEdit = CreateWindowA("EDIT", "10", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 255, 70, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
+        620, 285, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
+    
+    // FOV controls
+    CreateWindowA("STATIC", "Field of View (FOV):", WS_VISIBLE | WS_CHILD,
+        620, 320, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_fovDecreaseBtn = CreateWindowA("BUTTON", "(-)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        620, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
+    
+    m_fovIncreaseBtn = CreateWindowA("BUTTON", "(+)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        710, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
     
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
@@ -181,10 +210,19 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             int controlId = LOWORD(wParam);
             if (controlId >= ID_CAMERA_X && controlId <= ID_CAMERA_Z) {
                 OnCameraChanged();
-            } else if (controlId >= ID_ROTATION_X && controlId <= ID_ROTATION_Y) {
+            } else if (controlId >= ID_ROTATION_X && controlId <= ID_ROTATION_Y || controlId == ID_ROTATION_Z) {
                 OnRotationChanged();
+            } else if (controlId >= ID_CAMERA_ROLL_X && controlId <= ID_CAMERA_ROLL_Z) {
+                OnCameraChanged();  // 摄像机roll角度变化也调用OnCameraChanged
             } else if (controlId >= ID_LIGHT_X && controlId <= ID_LIGHT_INTENSITY) {
                 OnLightChanged();
+            }
+        } else if (HIWORD(wParam) == BN_CLICKED) {
+            int controlId = LOWORD(wParam);
+            if (controlId == ID_FOV_INCREASE) {
+                OnFovIncrease();
+            } else if (controlId == ID_FOV_DECREASE) {
+                OnFovDecrease();
             }
         }
         return 0;
@@ -225,6 +263,16 @@ void RenderWindow::OnCameraChanged() {
     GetWindowTextA(m_cameraZEdit, buffer, sizeof(buffer));
     m_cameraZ = static_cast<float>(atof(buffer));
     
+    // Get camera roll angles for XYZ axes
+    GetWindowTextA(m_cameraRollXEdit, buffer, sizeof(buffer));
+    m_cameraRollX = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_cameraRollYEdit, buffer, sizeof(buffer));
+    m_cameraRollY = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_cameraRollZEdit, buffer, sizeof(buffer));
+    m_cameraRollZ = static_cast<float>(atof(buffer));
+    
     UpdateRender();
 }
 
@@ -237,6 +285,9 @@ void RenderWindow::OnRotationChanged() {
     
     GetWindowTextA(m_rotationYEdit, buffer, sizeof(buffer));
     m_rotationY = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_rotationZEdit, buffer, sizeof(buffer));
+    m_rotationZ = static_cast<float>(atof(buffer));
     
     UpdateRender();
 }
@@ -261,19 +312,33 @@ void RenderWindow::OnLightChanged() {
 }
 
 void RenderWindow::UpdateRender() {
-    // Set up matrices
+    // Set up matrices - 支持完整的XYZ旋转
     Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(0, 0, -5)) * 
-                           VectorMath::rotate(m_rotationY, Vec3f(0, 1, 0)) * 
-                           VectorMath::rotate(m_rotationX, Vec3f(1, 0, 0)) * 
+                           VectorMath::rotate(m_rotationZ, Vec3f(0, 0, 1)) *  // Z轴旋转
+                           VectorMath::rotate(m_rotationY, Vec3f(0, 1, 0)) *  // Y轴旋转
+                           VectorMath::rotate(m_rotationX, Vec3f(1, 0, 0)) *  // X轴旋转
                            VectorMath::scale(Vec3f(0.5f, 0.5f, 0.5f));
     
-    Matrix4x4 viewMatrix = VectorMath::lookAt(
-        Vec3f(m_cameraX, m_cameraY, m_cameraZ),
-        Vec3f(0, 0, 0),
-        Vec3f(0, 1, 0)
-    );
+    // 计算带有XYZ三轴旋转的摄像机变换
+    Vec3f cameraPos(m_cameraX, m_cameraY, m_cameraZ);
+    Vec3f target(0, 0, 0);
     
-    Matrix4x4 projectionMatrix = VectorMath::perspective(20.0f, 
+    // 基础的LookAt矩阵
+    Vec3f forward = (target - cameraPos).normalize();
+    Vec3f worldUp(0, 1, 0);
+    Vec3f right = forward.cross(worldUp).normalize();
+    Vec3f up = right.cross(forward).normalize();
+    
+    Matrix4x4 baseLookAt = VectorMath::lookAt(cameraPos, target, up);
+    
+    // 应用摄像机的XYZ轴旋转
+    Matrix4x4 cameraRotation = VectorMath::rotate(m_cameraRollZ, Vec3f(0, 0, 1)) *  // Z轴旋转 (Roll)
+                              VectorMath::rotate(m_cameraRollY, Vec3f(0, 1, 0)) *  // Y轴旋转 (Yaw)
+                              VectorMath::rotate(m_cameraRollX, Vec3f(1, 0, 0));   // X轴旋转 (Pitch)
+    
+    Matrix4x4 viewMatrix = baseLookAt * cameraRotation;
+    
+    Matrix4x4 projectionMatrix = VectorMath::perspective(m_fov, 
         (float)m_renderWidth / m_renderHeight, 0.1f, 100.0f);
     
     Matrix4x4 viewportMatrix;
@@ -297,7 +362,13 @@ void RenderWindow::UpdateRender() {
     m_renderer->clear(Color(50, 50, 100));
     m_renderer->clearDepth();
     
+    // 先绘制坐标轴和网格
+    m_renderer->drawGrid(5.0f, 5);   // 5单位大小，5个分割（每1单位一条线）
+    m_renderer->drawAxes(2.0f);      // 2单位长度的坐标轴
+    m_renderer->drawLightPosition(); // 绘制光源位置
+    
     if (m_model->getFaceCount() > 0) {
+        m_renderer->drawLightRays(*m_model); // 绘制光线到顶点
         m_renderer->renderModel(*m_model);
     }
     
@@ -326,4 +397,21 @@ void RenderWindow::RenderToWindow() {
     // Trigger repaint of the main window to refresh the render area
     InvalidateRect(m_hwnd, nullptr, FALSE);
     UpdateWindow(m_hwnd);
+}
+
+// FOV控制方法实现
+void RenderWindow::OnFovIncrease() {
+    m_fov += 5.0f;  // 每次增加5度
+    if (m_fov > 120.0f) {  // 限制最大FOV为120度
+        m_fov = 120.0f;
+    }
+    UpdateRender();
+}
+
+void RenderWindow::OnFovDecrease() {
+    m_fov -= 5.0f;  // 每次减少5度
+    if (m_fov < 10.0f) {  // 限制最小FOV为10度
+        m_fov = 10.0f;
+    }
+    UpdateRender();
 } 

@@ -79,6 +79,21 @@ public:
     int getWidth() const { return width; }
     int getHeight() const { return height; }
     
+    // 新增：绘制线段
+    void drawLine(const Vec3f& start, const Vec3f& end, const Color& color, float width = 1.0f);
+    
+    // 新增：绘制坐标轴
+    void drawAxes(float length = 2.0f);
+    
+    // 新增：绘制网格
+    void drawGrid(float size = 5.0f, int divisions = 10);
+    
+    // 新增：绘制光源位置
+    void drawLightPosition();
+    
+    // 新增：绘制光线到模型顶点
+    void drawLightRays(const Model& model);
+    
 private:
     // 顶点着色器
     struct ShaderVertex {
@@ -86,6 +101,8 @@ private:
         Vec3f normal;
         Vec2f texCoord;
         Vec3f worldPos;
+        Vec3f localPos;      // 新增：本地坐标位置
+        Vec3f localNormal;   // 新增：本地坐标法向量
     };
     
     // 片段着色器
@@ -94,6 +111,8 @@ private:
         Vec3f normal;
         Vec2f texCoord;
         Vec3f worldPos;
+        Vec3f localPos;      // 新增：本地坐标位置
+        Vec3f localNormal;   // 新增：本地坐标法向量
     };
     
     // 顶点着色器
@@ -118,7 +137,7 @@ private:
     void setPixel(int x, int y, const Color& color, float depth);
     
     // 计算光照
-    Vec3f calculateLighting(const Vec3f& normal, const Vec3f& worldPos, const Vec3f& baseColor);
+    Vec3f calculateLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
     
     // 正面剔除
     bool isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2);
