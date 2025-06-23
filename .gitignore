@@ -1,0 +1,23 @@
+# 忽略构建文件夹
+build/
+
+# 忽略Visual Studio文件夹
+.vs/
+
+# 忽略输出文件夹
+out/
+
+# 忽略编译生成的文件
+*.exe
+*.obj
+*.pdb
+*.dll
+*.lib
+*.exp
+*.ilk
+
+# 忽略输出图像文件
+*.bmp
+*.png
+*.jpg
+*.jpeg 

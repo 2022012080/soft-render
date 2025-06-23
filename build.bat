@@ -1,30 +1,40 @@
 @echo off
-echo 软光栅渲染器编译脚本
-echo ======================
+echo Starting clean build process...
 
-if not exist build mkdir build
+REM Clean existing build directory
+if exist build (
+    echo Cleaning previous build...
+    rmdir /s /q build
+)
+
+REM Create new build directory
+mkdir build
 cd build
 
-echo 配置项目...
+REM Configure with CMake
+echo Configuring with CMake...
 cmake .. -G "Visual Studio 17 2022" -A x64
-if errorlevel 1 (
-    echo CMake配置失败！
+
+REM Check if configuration was successful
+if %ERRORLEVEL% NEQ 0 (
+    echo CMake configuration failed!
     pause
     exit /b 1
 )
 
-echo 编译项目...
+REM Build the project
+echo Building project...
 cmake --build . --config Release
-if errorlevel 1 (
-    echo 编译失败！
+
+REM Check if build was successful
+if %ERRORLEVEL% NEQ 0 (
+    echo Build failed!
     pause
     exit /b 1
 )
 
-echo 编译完成！
-echo 可执行文件位置: build\Release\SoftRenderer.exe
-echo.
-echo 运行程序...
-cd Release
-SoftRenderer.exe
+echo Build completed successfully!
+echo Executable is in: build\Release\SoftRenderer.exe
+
+cd ..
 pause 

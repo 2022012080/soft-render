@@ -1,5 +1,5 @@
 #pragma once
-#include "math.h"
+#include "vector_math.h"
 #include <vector>
 #include <string>
 
@@ -19,9 +19,9 @@ struct Color {
     // 从浮点数创建
     static Color fromVec3f(const Vec3f& v) {
         return Color(
-            static_cast<unsigned char>(Math::clamp(v.x, 0.0f, 1.0f) * 255.0f),
-            static_cast<unsigned char>(Math::clamp(v.y, 0.0f, 1.0f) * 255.0f),
-            static_cast<unsigned char>(Math::clamp(v.z, 0.0f, 1.0f) * 255.0f)
+            static_cast<unsigned char>(VectorMath::clamp(v.x, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(VectorMath::clamp(v.y, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(VectorMath::clamp(v.z, 0.0f, 1.0f) * 255.0f)
         );
     }
 };

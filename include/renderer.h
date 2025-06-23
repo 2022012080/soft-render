@@ -1,5 +1,5 @@
 #pragma once
-#include "math.h"
+#include "vector_math.h"
 #include "model.h"
 #include "texture.h"
 #include <vector>
@@ -26,13 +26,15 @@ private:
     Matrix4x4 viewMatrix;
     Matrix4x4 projectionMatrix;
     Matrix4x4 viewportMatrix;
+    Matrix4x4 normalMatrix;
     
     // 纹理
     std::shared_ptr<Texture> currentTexture;
     
-    // 光照参数
-    Vec3f lightDir;
+    // 点光源参数
+    Vec3f lightPosition;
     Vec3f lightColor;
+    float lightIntensity;
     float ambientIntensity;
     
 public:
@@ -43,7 +45,10 @@ public:
     void clearDepth();
     
     // 设置变换矩阵
-    void setModelMatrix(const Matrix4x4& matrix) { modelMatrix = matrix; }
+    void setModelMatrix(const Matrix4x4& matrix) { 
+        modelMatrix = matrix; 
+        updateNormalMatrix();
+    }
     void setViewMatrix(const Matrix4x4& matrix) { viewMatrix = matrix; }
     void setProjectionMatrix(const Matrix4x4& matrix) { projectionMatrix = matrix; }
     void setViewportMatrix(const Matrix4x4& matrix) { viewportMatrix = matrix; }
@@ -51,9 +56,10 @@ public:
     // 设置纹理
     void setTexture(std::shared_ptr<Texture> texture) { currentTexture = texture; }
     
-    // 设置光照
-    void setLightDirection(const Vec3f& dir) { lightDir = dir.normalize(); }
+    // 设置点光源
+    void setLightPosition(const Vec3f& pos) { lightPosition = pos; }
     void setLightColor(const Vec3f& color) { lightColor = color; }
+    void setLightIntensity(float intensity) { lightIntensity = intensity; }
     void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
     
     // 渲染模型
@@ -116,4 +122,10 @@ private:
     
     // 正面剔除
     bool isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2);
+    
+    // 重心坐标计算
+    Vec3f barycentric(const Vec2f& a, const Vec2f& b, const Vec2f& c, const Vec2f& p);
+    
+    // 更新法向量变换矩阵
+    void updateNormalMatrix();
 }; 
