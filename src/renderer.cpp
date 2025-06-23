@@ -58,7 +58,11 @@ void Renderer::renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& 
         return;
     }
     
+    // 渲染三角形面
     rasterizeTriangle(sv0, sv1, sv2);
+    
+    // 绘制三角形边线
+    drawTriangleEdges(sv0, sv1, sv2);
 }
 
 Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
@@ -83,11 +87,13 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
 }
 
 Color Renderer::fragmentShader(const ShaderFragment& fragment) {
-    Vec3f baseColor(1, 1, 1);
+    // 强制设置为纯白色，完全忽略纹理
+    Vec3f baseColor(1, 1, 1);  // 纯白色
     
-    if (currentTexture && currentTexture->isValid()) {
-        baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
-    }
+    // 完全禁用纹理采样，确保球体显示为纯白色
+    // if (currentTexture && currentTexture->isValid()) {
+    //     baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
+    // }
     
     Vec3f finalColor = calculateLighting(fragment.localPos, fragment.localNormal, baseColor);
     
@@ -304,7 +310,7 @@ void Renderer::updateNormalMatrix() {
     normalMatrix = VectorMath::transpose(VectorMath::inverse(modelMatrix));
 }
 
-// 绘制线段 - 使用Bresenham算法
+// 绘制线段 - 使用改进的Bresenham算法
 void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color, float width) {
     // 将3D点转换到屏幕坐标
     Vec3f worldStart = modelMatrix * start;
@@ -323,7 +329,7 @@ void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color
     float z0 = screenStart.z;
     float z1 = screenEnd.z;
     
-    // Bresenham直线算法
+    // 改进的Bresenham直线算法
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);
     int sx = (x0 < x1) ? 1 : -1;
@@ -333,35 +339,42 @@ void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color
     int x = x0, y = y0;
     float totalDistance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
     
+    // 确保线宽至少为1
+    int lineWidth = std::max(1, static_cast<int>(width));
+    int halfWidth = lineWidth / 2;
+    
     while (true) {
         // 计算当前点的深度值
         float currentDistance = std::sqrt(static_cast<float>((x - x0) * (x - x0) + (y - y0) * (y - y0)));
         float t = (totalDistance > 0) ? (currentDistance / totalDistance) : 0;
         float z = VectorMath::lerp(z0, z1, t);
         
-        // 绘制像素（考虑线宽）
-        int halfWidth = static_cast<int>(width / 2);
+        // 绘制像素（考虑线宽）- 使用圆形笔刷
         for (int dx_offset = -halfWidth; dx_offset <= halfWidth; dx_offset++) {
             for (int dy_offset = -halfWidth; dy_offset <= halfWidth; dy_offset++) {
-                int px = x + dx_offset;
-                int py = y + dy_offset;
-                if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
-                    if (depthTest(px, py, z)) {
-                        // 如果颜色有alpha通道，进行alpha混合
-                        if (color.a < 255) {
-                            int index = py * this->width + px;
-                            Color existingColor = frameBuffer[index].color;
-                            
-                            float alpha = color.a / 255.0f;
-                            Color blendedColor(
-                                static_cast<unsigned char>(color.r * alpha + existingColor.r * (1.0f - alpha)),
-                                static_cast<unsigned char>(color.g * alpha + existingColor.g * (1.0f - alpha)),
-                                static_cast<unsigned char>(color.b * alpha + existingColor.b * (1.0f - alpha)),
-                                255
-                            );
-                            setPixel(px, py, blendedColor, z);
-                        } else {
-                            setPixel(px, py, color, z);
+                // 使用圆形笔刷，避免方形笔刷的锯齿
+                float distance = std::sqrt(static_cast<float>(dx_offset * dx_offset + dy_offset * dy_offset));
+                if (distance <= halfWidth) {
+                    int px = x + dx_offset;
+                    int py = y + dy_offset;
+                    if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+                        if (depthTest(px, py, z)) {
+                            // 如果颜色有alpha通道，进行alpha混合
+                            if (color.a < 255) {
+                                int index = py * this->width + px;
+                                Color existingColor = frameBuffer[index].color;
+                                
+                                float alpha = color.a / 255.0f;
+                                Color blendedColor(
+                                    static_cast<unsigned char>(color.r * alpha + existingColor.r * (1.0f - alpha)),
+                                    static_cast<unsigned char>(color.g * alpha + existingColor.g * (1.0f - alpha)),
+                                    static_cast<unsigned char>(color.b * alpha + existingColor.b * (1.0f - alpha)),
+                                    255
+                                );
+                                setPixel(px, py, blendedColor, z);
+                            } else {
+                                setPixel(px, py, color, z);
+                            }
                         }
                     }
                 }
@@ -551,4 +564,11 @@ void Renderer::drawLightRays(const Model& model) {
             drawLine(localLightPos, vertexPos, rayColor, 1.0f);
         }
     }
+}
+
+void Renderer::drawTriangleEdges(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
+    // 绘制三角形边线 - 使用本地坐标，增加线宽防止断线
+    drawLine(v0.localPos, v1.localPos, Color(0, 0, 0), 3.0f);  // 黑色边线，宽度3像素
+    drawLine(v1.localPos, v2.localPos, Color(0, 0, 0), 3.0f);
+    drawLine(v2.localPos, v0.localPos, Color(0, 0, 0), 3.0f);
 } 

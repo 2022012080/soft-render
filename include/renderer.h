@@ -124,6 +124,9 @@ private:
     // 光栅化三角形
     void rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2);
     
+    // 绘制三角形边线
+    void drawTriangleEdges(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2);
+    
     // 绘制扫描线
     void drawScanline(int y, int x1, int x2, const ShaderFragment& f1, const ShaderFragment& f2);
     
