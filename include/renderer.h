@@ -21,6 +21,13 @@ private:
     std::vector<float> depthBuffer;
     int width, height;
     
+    // 超采样抗锯齿相关
+    bool m_enableSSAA;
+    int m_ssaaScale;  // 超采样倍数，通常为2或4
+    std::vector<Pixel> m_highResFrameBuffer;
+    std::vector<float> m_highResDepthBuffer;
+    int m_highResWidth, m_highResHeight;
+    
     // 变换矩阵
     Matrix4x4 modelMatrix;
     Matrix4x4 viewMatrix;
@@ -47,6 +54,12 @@ public:
     // 清空缓冲
     void clear(const Color& color = Color(0, 0, 0));
     void clearDepth();
+    
+    // 超采样抗锯齿控制
+    void enableSSAA(bool enable, int scale = 4);
+    void disableSSAA();
+    bool isSSAAEnabled() const { return m_enableSSAA; }
+    int getSSAAScale() const { return m_ssaaScale; }
     
     // 设置变换矩阵
     void setModelMatrix(const Matrix4x4& matrix) { 
@@ -124,6 +137,18 @@ private:
         Vec3f localPos;      // 新增：本地坐标位置
         Vec3f localNormal;   // 新增：本地坐标法向量
     };
+    
+    // 超采样相关私有方法
+    void initializeSSAABuffers();
+    void downsampleFromHighRes();
+    Matrix4x4 createHighResViewportMatrix() const;
+    
+    // 渲染到高分辨率缓冲区
+    void renderToHighRes(const Model& model);
+    void renderTriangleHighRes(const Vertex& v0, const Vertex& v1, const Vertex& v2);
+    void rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2);
+    bool depthTestHighRes(int x, int y, float depth);
+    void setPixelHighRes(int x, int y, const Color& color, float depth);
     
     // 顶点着色器
     ShaderVertex vertexShader(const Vertex& vertex);

@@ -177,6 +177,22 @@ void RenderWindow::CreateControls() {
     m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1330, 450, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
     
+    // 新增：SSAA控制
+    CreateWindowA("STATIC", "SSAA (Super Sampling):", WS_VISIBLE | WS_CHILD,
+        1220, 490, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_toggleSSAABtn = CreateWindowA("BUTTON", "SSAA: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1220, 515, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
+    
+    m_ssaaScaleDecBtn = CreateWindowA("BUTTON", "Scale -", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1330, 515, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
+    
+    m_ssaaScaleIncBtn = CreateWindowA("BUTTON", "Scale +", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1410, 515, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
+    
+    m_ssaaStatusLabel = CreateWindowA("STATIC", "SSAA: OFF (1x)", WS_VISIBLE | WS_CHILD,
+        1220, 555, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
         10, 10, m_renderWidth, m_renderHeight, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
@@ -237,6 +253,12 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnToggleEdges();
             } else if (controlId == ID_TOGGLE_RAYS) {
                 OnToggleRays();
+            } else if (controlId == ID_TOGGLE_SSAA) {
+                OnToggleSSAA();
+            } else if (controlId == ID_SSAA_SCALE_INC) {
+                OnSSAAScaleIncrease();
+            } else if (controlId == ID_SSAA_SCALE_DEC) {
+                OnSSAAScaleDecrease();
             }
         }
         return 0;
@@ -453,4 +475,81 @@ void RenderWindow::OnToggleRays() {
     SetWindowTextA(m_toggleRaysBtn, newText);
     
     UpdateRender();
+}
+
+void RenderWindow::OnToggleSSAA() {
+    bool currentState = m_renderer->isSSAAEnabled();
+    
+    if (currentState) {
+        m_renderer->disableSSAA();
+        SetWindowTextA(m_toggleSSAABtn, "SSAA: OFF");
+    } else {
+        m_renderer->enableSSAA(true, m_renderer->getSSAAScale());
+        SetWindowTextA(m_toggleSSAABtn, "SSAA: ON");
+    }
+    
+    UpdateSSAAControls();
+    UpdateRender();
+}
+
+void RenderWindow::OnSSAAScaleIncrease() {
+    int currentScale = m_renderer->getSSAAScale();
+    if (currentScale < 8) {  // 限制最大8x
+        int newScale = currentScale * 2;  // 2x, 4x, 8x
+        bool wasEnabled = m_renderer->isSSAAEnabled();
+        
+        if (wasEnabled) {
+            m_renderer->enableSSAA(true, newScale);
+        } else {
+            // 即使未启用，也更新比例设置
+            m_renderer->enableSSAA(false, newScale);
+        }
+        
+        UpdateSSAAControls();
+        if (wasEnabled) {
+            UpdateRender();
+        }
+    }
+}
+
+void RenderWindow::OnSSAAScaleDecrease() {
+    int currentScale = m_renderer->getSSAAScale();
+    if (currentScale > 2) {  // 限制最小2x
+        int newScale = currentScale / 2;  // 8x, 4x, 2x
+        bool wasEnabled = m_renderer->isSSAAEnabled();
+        
+        if (wasEnabled) {
+            m_renderer->enableSSAA(true, newScale);
+        } else {
+            // 即使未启用，也更新比例设置
+            m_renderer->enableSSAA(false, newScale);
+        }
+        
+        UpdateSSAAControls();
+        if (wasEnabled) {
+            UpdateRender();
+        }
+    }
+}
+
+void RenderWindow::UpdateSSAAControls() {
+    bool isEnabled = m_renderer->isSSAAEnabled();
+    int scale = m_renderer->getSSAAScale();
+    
+    // 更新状态标签
+    char statusText[64];
+    if (isEnabled) {
+        int highResWidth = m_renderWidth * scale;
+        int highResHeight = m_renderHeight * scale;
+        sprintf_s(statusText, sizeof(statusText), "SSAA: ON (%dx) [%dx%d->%dx%d]", 
+                 scale, highResWidth, highResHeight, m_renderWidth, m_renderHeight);
+    } else {
+        sprintf_s(statusText, sizeof(statusText), "SSAA: OFF (%dx available)", scale);
+    }
+    
+    SetWindowTextA(m_ssaaStatusLabel, statusText);
+    
+    // 更新按钮状态
+    EnableWindow(m_ssaaScaleIncBtn, scale < 8);
+    EnableWindow(m_ssaaScaleDecBtn, scale > 2);
 } 

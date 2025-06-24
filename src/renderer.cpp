@@ -8,6 +8,12 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     frameBuffer.resize(width * height);
     depthBuffer.resize(width * height);
     
+    // 初始化超采样抗锯齿参数
+    m_enableSSAA = false;
+    m_ssaaScale = 4;
+    m_highResWidth = 0;
+    m_highResHeight = 0;
+    
     // 初始化点光源参数
     lightPosition = Vec3f(3, 3, 3);
     lightColor = Vec3f(1, 1, 1);
@@ -22,25 +28,267 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     updateNormalMatrix();
 }
 
+void Renderer::enableSSAA(bool enable, int scale) {
+    m_enableSSAA = enable;
+    m_ssaaScale = scale;
+    
+    if (enable) {
+        initializeSSAABuffers();
+        std::cout << "SSAA enabled with " << scale << "x scale (" 
+                  << m_highResWidth << "x" << m_highResHeight << " -> " 
+                  << width << "x" << height << ")" << std::endl;
+    } else {
+        // 释放高分辨率缓冲区内存
+        m_highResFrameBuffer.clear();
+        m_highResDepthBuffer.clear();
+        m_highResFrameBuffer.shrink_to_fit();
+        m_highResDepthBuffer.shrink_to_fit();
+        std::cout << "SSAA disabled" << std::endl;
+    }
+}
+
+void Renderer::disableSSAA() {
+    enableSSAA(false, m_ssaaScale);
+}
+
+void Renderer::initializeSSAABuffers() {
+    m_highResWidth = width * m_ssaaScale;
+    m_highResHeight = height * m_ssaaScale;
+    
+    // 分配高分辨率缓冲区
+    m_highResFrameBuffer.resize(m_highResWidth * m_highResHeight);
+    m_highResDepthBuffer.resize(m_highResWidth * m_highResHeight);
+    
+    std::cout << "Initialized SSAA buffers: " << m_highResWidth << "x" << m_highResHeight 
+              << " (" << (m_highResFrameBuffer.size() * sizeof(Pixel) + 
+                         m_highResDepthBuffer.size() * sizeof(float)) / (1024*1024) 
+              << " MB)" << std::endl;
+}
+
+Matrix4x4 Renderer::createHighResViewportMatrix() const {
+    if (!m_enableSSAA) {
+        return viewportMatrix;
+    }
+    
+    // 创建高分辨率视口变换矩阵
+    float halfWidth = m_highResWidth * 0.5f;
+    float halfHeight = m_highResHeight * 0.5f;
+    
+    Matrix4x4 highResViewport;
+    highResViewport.m[0][0] = halfWidth;
+    highResViewport.m[1][1] = halfHeight;   // 保持与原始视口矩阵一致，不翻转Y轴
+    highResViewport.m[2][2] = 1.0f;         // 保持与原始视口矩阵一致
+    highResViewport.m[0][3] = halfWidth;
+    highResViewport.m[1][3] = halfHeight;
+    
+    return highResViewport;
+}
+
 void Renderer::clear(const Color& color) {
+    // 清空常规帧缓冲
     for (auto& pixel : frameBuffer) {
         pixel.color = color;
         pixel.depth = 1.0f;
     }
+    
+    // 如果启用了SSAA，也清空高分辨率缓冲
+    if (m_enableSSAA) {
+        for (auto& pixel : m_highResFrameBuffer) {
+            pixel.color = color;
+            pixel.depth = 1.0f;
+        }
+    }
 }
 
 void Renderer::clearDepth() {
+    // 清空常规深度缓冲
     for (auto& depth : depthBuffer) {
         depth = 1.0f;
+    }
+    
+    // 如果启用了SSAA，也清空高分辨率深度缓冲
+    if (m_enableSSAA) {
+        for (auto& depth : m_highResDepthBuffer) {
+            depth = 1.0f;
+        }
     }
 }
 
 void Renderer::renderModel(const Model& model) {
+    if (m_enableSSAA) {
+        renderToHighRes(model);
+        downsampleFromHighRes();
+    } else {
+        const auto& vertices = model.getVertices();
+        
+        for (size_t i = 0; i < vertices.size(); i += 3) {
+            if (i + 2 < vertices.size()) {
+                renderTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+            }
+        }
+    }
+}
+
+void Renderer::renderToHighRes(const Model& model) {
+    // 保存原始视口矩阵
+    Matrix4x4 originalViewport = viewportMatrix;
+    
+    // 设置高分辨率视口矩阵
+    viewportMatrix = createHighResViewportMatrix();
+    
     const auto& vertices = model.getVertices();
     
     for (size_t i = 0; i < vertices.size(); i += 3) {
         if (i + 2 < vertices.size()) {
-            renderTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+            renderTriangleHighRes(vertices[i], vertices[i + 1], vertices[i + 2]);
+        }
+    }
+    
+    // 恢复原始视口矩阵
+    viewportMatrix = originalViewport;
+}
+
+void Renderer::renderTriangleHighRes(const Vertex& v0, const Vertex& v1, const Vertex& v2) {
+    ShaderVertex sv0 = vertexShader(v0);
+    ShaderVertex sv1 = vertexShader(v1);
+    ShaderVertex sv2 = vertexShader(v2);
+    
+    // Convert to view space for proper face culling
+    Vec3f worldPos0 = modelMatrix * v0.position;
+    Vec3f worldPos1 = modelMatrix * v1.position;
+    Vec3f worldPos2 = modelMatrix * v2.position;
+    Vec3f viewPos0 = viewMatrix * worldPos0;
+    Vec3f viewPos1 = viewMatrix * worldPos1;
+    Vec3f viewPos2 = viewMatrix * worldPos2;
+    
+    if (!isFrontFace(viewPos0, viewPos1, viewPos2)) {
+        return;
+    }
+    
+    // 渲染到高分辨率缓冲区
+    rasterizeTriangleHighRes(sv0, sv1, sv2);
+}
+
+void Renderer::rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
+    int x0 = static_cast<int>(v0.position.x);
+    int y0 = static_cast<int>(v0.position.y);
+    int x1 = static_cast<int>(v1.position.x);
+    int y1 = static_cast<int>(v1.position.y);
+    int x2 = static_cast<int>(v2.position.x);
+    int y2 = static_cast<int>(v2.position.y);
+    
+    int minX = std::max(0, std::min({x0, x1, x2}));
+    int maxX = std::min(m_highResWidth - 1, std::max({x0, x1, x2}));
+    int minY = std::max(0, std::min({y0, y1, y2}));
+    int maxY = std::min(m_highResHeight - 1, std::max({y0, y1, y2}));
+    
+    for (int y = minY; y <= maxY; y++) {
+        for (int x = minX; x <= maxX; x++) {
+            Vec3f bary = barycentric(Vec2f(static_cast<float>(x0), static_cast<float>(y0)), 
+                                   Vec2f(static_cast<float>(x1), static_cast<float>(y1)), 
+                                   Vec2f(static_cast<float>(x2), static_cast<float>(y2)), 
+                                   Vec2f(static_cast<float>(x), static_cast<float>(y)));
+            
+            if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
+                float depth = bary.x * v0.position.z + bary.y * v1.position.z + bary.z * v2.position.z;
+                
+                if (depthTestHighRes(x, y, depth)) {
+                    ShaderFragment fragment;
+                    // 使用正确的重心坐标插值
+                    fragment.position = v0.position * bary.x + v1.position * bary.y + v2.position * bary.z;
+                    fragment.normal = v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z;
+                    fragment.texCoord = v0.texCoord * bary.x + v1.texCoord * bary.y + v2.texCoord * bary.z;
+                    fragment.worldPos = v0.worldPos * bary.x + v1.worldPos * bary.y + v2.worldPos * bary.z;
+                    fragment.localPos = v0.localPos * bary.x + v1.localPos * bary.y + v2.localPos * bary.z;
+                    fragment.localNormal = v0.localNormal * bary.x + v1.localNormal * bary.y + v2.localNormal * bary.z;
+                    
+                    fragment.normal = fragment.normal.normalize();
+                    fragment.localNormal = fragment.localNormal.normalize();
+                    
+                    Color color = fragmentShader(fragment);
+                    setPixelHighRes(x, y, color, depth);
+                }
+            }
+        }
+    }
+}
+
+bool Renderer::depthTestHighRes(int x, int y, float depth) {
+    int index = y * m_highResWidth + x;
+    if (index >= 0 && index < static_cast<int>(m_highResDepthBuffer.size()) && depth < m_highResDepthBuffer[index]) {
+        m_highResDepthBuffer[index] = depth;
+        return true;
+    }
+    return false;
+}
+
+void Renderer::setPixelHighRes(int x, int y, const Color& color, float depth) {
+    if (x < 0 || x >= m_highResWidth || y < 0 || y >= m_highResHeight) {
+        return;
+    }
+    
+    int index = y * m_highResWidth + x;
+    if (index >= 0 && index < static_cast<int>(m_highResFrameBuffer.size())) {
+        m_highResFrameBuffer[index].color = color;
+        m_highResFrameBuffer[index].depth = depth;
+    }
+}
+
+void Renderer::downsampleFromHighRes() {
+    if (!m_enableSSAA || m_highResFrameBuffer.empty()) {
+        return;
+    }
+    
+    // 对于每个低分辨率像素，从对应的高分辨率区域采样并求平均值
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float totalR = 0.0f, totalG = 0.0f, totalB = 0.0f;
+            int sampleCount = 0;
+            
+            // 计算对应的高分辨率区域
+            int startX = x * m_ssaaScale;
+            int startY = y * m_ssaaScale;
+            int endX = startX + m_ssaaScale;
+            int endY = startY + m_ssaaScale;
+            
+            // 确保不超出边界
+            endX = std::min(endX, m_highResWidth);
+            endY = std::min(endY, m_highResHeight);
+            
+            // 对高分辨率区域内的所有像素求平均
+            for (int highY = startY; highY < endY; highY++) {
+                for (int highX = startX; highX < endX; highX++) {
+                    int highIndex = highY * m_highResWidth + highX;
+                    if (highIndex >= 0 && highIndex < static_cast<int>(m_highResFrameBuffer.size())) {
+                        const Color& highResColor = m_highResFrameBuffer[highIndex].color;
+                        totalR += highResColor.r;
+                        totalG += highResColor.g;
+                        totalB += highResColor.b;
+                        sampleCount++;
+                    }
+                }
+            }
+            
+            // 计算平均颜色
+            if (sampleCount > 0) {
+                Color avgColor(
+                    static_cast<unsigned char>(totalR / sampleCount),
+                    static_cast<unsigned char>(totalG / sampleCount),
+                    static_cast<unsigned char>(totalB / sampleCount)
+                );
+                
+                int lowIndex = y * width + x;
+                if (lowIndex >= 0 && lowIndex < static_cast<int>(frameBuffer.size())) {
+                    frameBuffer[lowIndex].color = avgColor;
+                    // 深度值使用中心点的深度
+                    int centerHighX = startX + m_ssaaScale / 2;
+                    int centerHighY = startY + m_ssaaScale / 2;
+                    int centerHighIndex = centerHighY * m_highResWidth + centerHighX;
+                    if (centerHighIndex >= 0 && centerHighIndex < static_cast<int>(m_highResFrameBuffer.size())) {
+                        frameBuffer[lowIndex].depth = m_highResFrameBuffer[centerHighIndex].depth;
+                    }
+                }
+            }
         }
     }
 }

@@ -24,6 +24,11 @@ public:
     void OnToggleEdges();
     void OnToggleRays();
     
+    // 新增：SSAA控制方法
+    void OnToggleSSAA();
+    void OnSSAAScaleIncrease();
+    void OnSSAAScaleDecrease();
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -33,6 +38,7 @@ private:
     void OnRotationChanged();
     void OnLightChanged();
     void RenderToWindow();
+    void UpdateSSAAControls();
     
     // Window handles
     HWND m_hwnd;
@@ -48,6 +54,10 @@ private:
     
     // 新增：绘制控制按钮
     HWND m_toggleEdgesBtn, m_toggleRaysBtn;
+    
+    // 新增：SSAA控制按钮和标签
+    HWND m_toggleSSAABtn, m_ssaaScaleIncBtn, m_ssaaScaleDecBtn;
+    HWND m_ssaaStatusLabel;
     
     // Rendering
     std::unique_ptr<Renderer> m_renderer;
@@ -96,4 +106,9 @@ private:
     // 新增：绘制控制ID
     static const int ID_TOGGLE_EDGES = 1017;
     static const int ID_TOGGLE_RAYS = 1018;
+    
+    // 新增：SSAA控制ID
+    static const int ID_TOGGLE_SSAA = 1019;
+    static const int ID_SSAA_SCALE_INC = 1020;
+    static const int ID_SSAA_SCALE_DEC = 1021;
 }; 

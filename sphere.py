@@ -107,12 +107,12 @@ def main():
     # Generate the sphere data
     vertices, texture_coords, normals, faces = generate_high_res_sphere(
         radius=2.0,
-        longitude_divisions=64,  # 16 * 4 = 64
-        latitude_divisions=32    # 8 * 4 = 32
+        longitude_divisions=256,  # 16 * 4 = 64
+        latitude_divisions=128    # 8 * 4 = 32
     )
     
     # Write to file
-    output_file = "assets/high_res_sphere.obj"
+    output_file = "assets/cube.obj"
     write_obj_file(output_file, vertices, texture_coords, normals, faces)
     
     print(f"Generated {len(vertices)} vertices")
