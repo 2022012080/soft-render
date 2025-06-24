@@ -24,12 +24,16 @@ public:
     void OnToggleEdges();
     void OnToggleRays();
     
+    // 新增：纹理控制方法
+    void OnToggleTexture();
+    
     // 新增：SSAA控制方法
     void OnToggleSSAA();
     void OnSSAAScaleIncrease();
     void OnSSAAScaleDecrease();
     
     void OnCameraChanged();
+    void OnObjectChanged(); // 新增：物体坐标变化处理
     void OnRotationChanged();
     void OnLightChanged();
     void OnLight2Changed(); // 新增：第二个光源变化处理
@@ -46,7 +50,7 @@ private:
     // Window handles
     HWND m_hwnd;
     HWND m_renderArea;
-    HWND m_cameraXEdit, m_cameraYEdit, m_cameraZEdit;
+    HWND m_objectXEdit, m_objectYEdit, m_objectZEdit;
     HWND m_rotationXEdit, m_rotationYEdit, m_rotationZEdit;
     HWND m_cameraRollXEdit, m_cameraRollYEdit, m_cameraRollZEdit; // 摄像机XYZ轴旋转
     HWND m_lightXEdit, m_lightYEdit, m_lightZEdit, m_lightIntensityEdit;
@@ -63,6 +67,9 @@ private:
     // 新增：绘制控制按钮
     HWND m_toggleEdgesBtn, m_toggleRaysBtn;
     
+    // 新增：纹理控制按钮
+    HWND m_toggleTextureBtn;
+    
     // 新增：SSAA控制按钮和标签
     HWND m_toggleSSAABtn, m_ssaaScaleIncBtn, m_ssaaScaleDecBtn;
     HWND m_ssaaStatusLabel;
@@ -76,10 +83,12 @@ private:
     int m_windowWidth, m_windowHeight;
     int m_renderWidth, m_renderHeight;
     
-    // Camera settings
-    float m_cameraX, m_cameraY, m_cameraZ;
+    // Camera settings (摄像机固定在原点，只有角度参数)
     float m_rotationX, m_rotationY, m_rotationZ;
     float m_cameraRollX, m_cameraRollY, m_cameraRollZ; // 摄像机XYZ轴旋转
+    
+    // Object position settings (物体坐标参数)
+    float m_objectX, m_objectY, m_objectZ;
     
     // 新增：FOV设置
     float m_fov;
@@ -97,9 +106,9 @@ private:
     void* m_bitmapData;
     
     // Control IDs
-    static const int ID_CAMERA_X = 1001;
-    static const int ID_CAMERA_Y = 1002;
-    static const int ID_CAMERA_Z = 1003;
+    static const int ID_OBJECT_X = 1001;
+    static const int ID_OBJECT_Y = 1002;
+    static const int ID_OBJECT_Z = 1003;
     static const int ID_ROTATION_X = 1004;
     static const int ID_ROTATION_Y = 1005;
     static const int ID_ROTATION_Z = 1013;
@@ -118,6 +127,9 @@ private:
     // 新增：绘制控制ID
     static const int ID_TOGGLE_EDGES = 1017;
     static const int ID_TOGGLE_RAYS = 1018;
+    
+    // 新增：纹理控制ID
+    static const int ID_TOGGLE_TEXTURE = 1029;
     
     // 新增：SSAA控制ID
     static const int ID_TOGGLE_SSAA = 1019;

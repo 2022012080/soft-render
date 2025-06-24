@@ -63,6 +63,9 @@ private:
     bool m_drawTriangleEdges;
     bool m_drawLightRays;
     
+    // 新增：纹理启用控制
+    bool m_enableTexture;
+    
 public:
     Renderer(int w, int h);
     
@@ -111,6 +114,10 @@ public:
     void setDrawLightRays(bool draw) { m_drawLightRays = draw; }
     bool getDrawTriangleEdges() const { return m_drawTriangleEdges; }
     bool getDrawLightRays() const { return m_drawLightRays; }
+    
+    // 新增：纹理启用控制方法
+    void setTextureEnabled(bool enabled) { m_enableTexture = enabled; }
+    bool isTextureEnabled() const { return m_enableTexture; }
     
     // 渲染模型
     void renderModel(const Model& model);

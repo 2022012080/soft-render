@@ -27,8 +27,11 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     lights.push_back(Light(Vec3f(-3, 2, 1), Vec3f(0.8, 0.6, 1.0), 5.0f));  // 紫色辅助光源
     
     // 初始化绘制控制开关
-    m_drawTriangleEdges = true;
-    m_drawLightRays = true;
+    m_drawTriangleEdges = false;  // 默认关闭三角形描边
+    m_drawLightRays = false;      // 默认关闭光线
+    
+    // 初始化纹理启用控制
+    m_enableTexture = false;      // 默认关闭贴图
     
     // 初始化法向量变换矩阵
     updateNormalMatrix();
@@ -355,11 +358,11 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
 }
 
 Color Renderer::fragmentShader(const ShaderFragment& fragment) {
-    // 设置基础颜色 - 如果有纹理则使用纹理，否则使用白色
+    // 设置基础颜色 - 如果启用纹理且有纹理则使用纹理，否则使用白色
     Vec3f baseColor(1, 1, 1);  // 默认白色
     
-    // 启用纹理采样
-    if (currentTexture && currentTexture->isValid()) {
+    // 根据纹理启用开关决定是否进行纹理采样
+    if (m_enableTexture && currentTexture && currentTexture->isValid()) {
         baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
     }
     
@@ -786,37 +789,83 @@ void Renderer::drawLineHighRes(const Vec3f& start, const Vec3f& end, const Color
 void Renderer::drawAxes(float length) {
     Vec3f origin(0, 0, 0);
     
-    // X轴 - 红色
-    Vec3f xEnd(length, 0, 0);
-    drawLine(origin, xEnd, Color(255, 0, 0), 2.0f);
-    
-    // Y轴 - 绿色
-    Vec3f yEnd(0, length, 0);
-    drawLine(origin, yEnd, Color(0, 255, 0), 2.0f);
-    
-    // Z轴 - 蓝色
-    Vec3f zEnd(0, 0, length);
-    drawLine(origin, zEnd, Color(0, 0, 255), 2.0f);
-    
-    // 在原点绘制一个小球表示原点
-    Vec3f worldOrigin = modelMatrix * origin;
-    Vec3f viewOrigin = viewMatrix * worldOrigin;
-    Vec3f clipOrigin = projectionMatrix * viewOrigin;
-    Vec3f screenOrigin = viewportMatrix * clipOrigin;
-    
-    int ox = static_cast<int>(screenOrigin.x);
-    int oy = static_cast<int>(screenOrigin.y);
-    float oz = screenOrigin.z;
-    
-    // 绘制原点标记（小圆圈）
-    for (int dx = -3; dx <= 3; dx++) {
-        for (int dy = -3; dy <= 3; dy++) {
-            if (dx * dx + dy * dy <= 9) { // 半径为3的圆
-                int px = ox + dx;
-                int py = oy + dy;
-                if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
-                    if (depthTest(px, py, oz)) {
-                        setPixel(px, py, Color(255, 255, 255), oz);
+    // 根据SSAA状态选择合适的绘制函数
+    if (m_enableSSAA) {
+        // 在SSAA模式下，使用高分辨率绘制函数
+        // X轴 - 红色
+        Vec3f xEnd(length, 0, 0);
+        drawLineHighRes(origin, xEnd, Color(255, 0, 0), 2.0f * m_ssaaScale);
+        
+        // Y轴 - 绿色
+        Vec3f yEnd(0, length, 0);
+        drawLineHighRes(origin, yEnd, Color(0, 255, 0), 2.0f * m_ssaaScale);
+        
+        // Z轴 - 蓝色
+        Vec3f zEnd(0, 0, length);
+        drawLineHighRes(origin, zEnd, Color(0, 0, 255), 2.0f * m_ssaaScale);
+        
+        // 在原点绘制一个小球表示原点（使用高分辨率）
+        Vec3f worldOrigin = modelMatrix * origin;
+        Vec3f viewOrigin = viewMatrix * worldOrigin;
+        Vec3f clipOrigin = projectionMatrix * viewOrigin;
+        
+        // 使用高分辨率视口矩阵
+        Matrix4x4 highResViewport = createHighResViewportMatrix();
+        Vec3f screenOrigin = highResViewport * clipOrigin;
+        
+        int ox = static_cast<int>(screenOrigin.x);
+        int oy = static_cast<int>(screenOrigin.y);
+        float oz = screenOrigin.z;
+        
+        // 绘制原点标记（小圆圈）- 按比例调整大小
+        int radius = 3 * m_ssaaScale;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                if (dx * dx + dy * dy <= radius * radius) {
+                    int px = ox + dx;
+                    int py = oy + dy;
+                    if (px >= 0 && px < m_highResWidth && py >= 0 && py < m_highResHeight) {
+                        if (depthTestHighRes(px, py, oz)) {
+                            setPixelHighRes(px, py, Color(255, 255, 255), oz);
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // 普通模式下，使用普通绘制函数
+        // X轴 - 红色
+        Vec3f xEnd(length, 0, 0);
+        drawLine(origin, xEnd, Color(255, 0, 0), 2.0f);
+        
+        // Y轴 - 绿色
+        Vec3f yEnd(0, length, 0);
+        drawLine(origin, yEnd, Color(0, 255, 0), 2.0f);
+        
+        // Z轴 - 蓝色
+        Vec3f zEnd(0, 0, length);
+        drawLine(origin, zEnd, Color(0, 0, 255), 2.0f);
+        
+        // 在原点绘制一个小球表示原点
+        Vec3f worldOrigin = modelMatrix * origin;
+        Vec3f viewOrigin = viewMatrix * worldOrigin;
+        Vec3f clipOrigin = projectionMatrix * viewOrigin;
+        Vec3f screenOrigin = viewportMatrix * clipOrigin;
+        
+        int ox = static_cast<int>(screenOrigin.x);
+        int oy = static_cast<int>(screenOrigin.y);
+        float oz = screenOrigin.z;
+        
+        // 绘制原点标记（小圆圈）
+        for (int dx = -3; dx <= 3; dx++) {
+            for (int dy = -3; dy <= 3; dy++) {
+                if (dx * dx + dy * dy <= 9) { // 半径为3的圆
+                    int px = ox + dx;
+                    int py = oy + dy;
+                    if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
+                        if (depthTest(px, py, oz)) {
+                            setPixel(px, py, Color(255, 255, 255), oz);
+                        }
                     }
                 }
             }
@@ -829,20 +878,41 @@ void Renderer::drawGrid(float size, int divisions) {
     float step = size / divisions;
     Color gridColor(128, 128, 128, 128); // 半透明灰色
     
-    // 绘制平行于X轴的线（在XY平面上）
-    for (int i = -divisions; i <= divisions; i++) {
-        float z = i * step;
-        Vec3f start(-size, 0, z);
-        Vec3f end(size, 0, z);
-        drawLine(start, end, gridColor, 1.0f);
-    }
-    
-    // 绘制平行于Z轴的线（在XY平面上）
-    for (int i = -divisions; i <= divisions; i++) {
-        float x = i * step;
-        Vec3f start(x, 0, -size);
-        Vec3f end(x, 0, size);
-        drawLine(start, end, gridColor, 1.0f);
+    // 根据SSAA状态选择合适的绘制函数
+    if (m_enableSSAA) {
+        // 在SSAA模式下，使用高分辨率绘制函数
+        // 绘制平行于X轴的线（在XY平面上）
+        for (int i = -divisions; i <= divisions; i++) {
+            float z = i * step;
+            Vec3f start(-size, 0, z);
+            Vec3f end(size, 0, z);
+            drawLineHighRes(start, end, gridColor, 1.0f * m_ssaaScale);
+        }
+        
+        // 绘制平行于Z轴的线（在XY平面上）
+        for (int i = -divisions; i <= divisions; i++) {
+            float x = i * step;
+            Vec3f start(x, 0, -size);
+            Vec3f end(x, 0, size);
+            drawLineHighRes(start, end, gridColor, 1.0f * m_ssaaScale);
+        }
+    } else {
+        // 普通模式下，使用普通绘制函数
+        // 绘制平行于X轴的线（在XY平面上）
+        for (int i = -divisions; i <= divisions; i++) {
+            float z = i * step;
+            Vec3f start(-size, 0, z);
+            Vec3f end(size, 0, z);
+            drawLine(start, end, gridColor, 1.0f);
+        }
+        
+        // 绘制平行于Z轴的线（在XY平面上）
+        for (int i = -divisions; i <= divisions; i++) {
+            float x = i * step;
+            Vec3f start(x, 0, -size);
+            Vec3f end(x, 0, size);
+            drawLine(start, end, gridColor, 1.0f);
+        }
     }
 }
 

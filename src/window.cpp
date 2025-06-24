@@ -8,9 +8,9 @@
 RenderWindow::RenderWindow(int width, int height) 
     : m_windowWidth(width), m_windowHeight(height)
     , m_renderWidth(1200), m_renderHeight(900)
-    , m_cameraX(0.0f), m_cameraY(0.0f), m_cameraZ(5.0f)
     , m_rotationX(0.0f), m_rotationY(30.0f), m_rotationZ(0.0f)
     , m_cameraRollX(0.0f), m_cameraRollY(0.0f), m_cameraRollZ(0.0f)
+    , m_objectX(0.0f), m_objectY(0.0f), m_objectZ(-5.0f)
     , m_fov(20.0f)  // 初始FOV为20度
     , m_lightX(3.0f), m_lightY(3.0f), m_lightZ(3.0f), m_lightIntensity(10.0f)
     , m_light2X(-3.0f), m_light2Y(2.0f), m_light2Z(1.0f), m_light2Intensity(5.0f) // 第二个光源
@@ -116,18 +116,18 @@ bool RenderWindow::Initialize() {
 }
 
 void RenderWindow::CreateControls() {
-    // Camera controls - 增加标签宽度和控件间距
-    CreateWindowA("STATIC", "Camera Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
+    // Object position controls - 物体坐标控制
+    CreateWindowA("STATIC", "Object Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
         1220, 20, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_cameraXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_X, GetModuleHandle(nullptr), nullptr);
+    m_objectXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1220, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_X, GetModuleHandle(nullptr), nullptr);
     
-    m_cameraYEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1290, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Y, GetModuleHandle(nullptr), nullptr);
+    m_objectYEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1290, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Y, GetModuleHandle(nullptr), nullptr);
     
-    m_cameraZEdit = CreateWindowA("EDIT", "5", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1360, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Z, GetModuleHandle(nullptr), nullptr);
+    m_objectZEdit = CreateWindowA("EDIT", "-5", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1360, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Z, GetModuleHandle(nullptr), nullptr);
     
     // Rotation controls - 增加间距
     CreateWindowA("STATIC", "Model Rotation (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
@@ -228,11 +228,15 @@ void RenderWindow::CreateControls() {
     CreateWindowA("STATIC", "Render Controls:", WS_VISIBLE | WS_CHILD,
         1220, 595, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edges: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+    m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edges: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1220, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
     
-    m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+    m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1330, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
+    
+    // 新增：纹理控制按钮
+    m_toggleTextureBtn = CreateWindowA("BUTTON", "Texture: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1440, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_TEXTURE, GetModuleHandle(nullptr), nullptr);
     
     // 新增：SSAA控制
     CreateWindowA("STATIC", "SSAA (Super Sampling):", WS_VISIBLE | WS_CHILD,
@@ -291,8 +295,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
     case WM_COMMAND:
         if (HIWORD(wParam) == EN_CHANGE) {
             int controlId = LOWORD(wParam);
-            if (controlId >= ID_CAMERA_X && controlId <= ID_CAMERA_Z) {
-                OnCameraChanged();
+            if (controlId >= ID_OBJECT_X && controlId <= ID_OBJECT_Z) {
+                OnObjectChanged();
             } else if (controlId >= ID_ROTATION_X && controlId <= ID_ROTATION_Y || controlId == ID_ROTATION_Z) {
                 OnRotationChanged();
             } else if (controlId >= ID_CAMERA_ROLL_X && controlId <= ID_CAMERA_ROLL_Z) {
@@ -314,6 +318,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnToggleEdges();
             } else if (controlId == ID_TOGGLE_RAYS) {
                 OnToggleRays();
+            } else if (controlId == ID_TOGGLE_TEXTURE) {
+                OnToggleTexture();
             } else if (controlId == ID_TOGGLE_SSAA) {
                 OnToggleSSAA();
             } else if (controlId == ID_SSAA_SCALE_INC) {
@@ -348,19 +354,9 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
 }
 
 void RenderWindow::OnCameraChanged() {
-    // Get camera values from edit controls
+    // Get camera roll angles for XYZ axes
     char buffer[32];
     
-    GetWindowTextA(m_cameraXEdit, buffer, sizeof(buffer));
-    m_cameraX = static_cast<float>(atof(buffer));
-    
-    GetWindowTextA(m_cameraYEdit, buffer, sizeof(buffer));
-    m_cameraY = static_cast<float>(atof(buffer));
-    
-    GetWindowTextA(m_cameraZEdit, buffer, sizeof(buffer));
-    m_cameraZ = static_cast<float>(atof(buffer));
-    
-    // Get camera roll angles for XYZ axes
     GetWindowTextA(m_cameraRollXEdit, buffer, sizeof(buffer));
     m_cameraRollX = static_cast<float>(atof(buffer));
     
@@ -369,6 +365,22 @@ void RenderWindow::OnCameraChanged() {
     
     GetWindowTextA(m_cameraRollZEdit, buffer, sizeof(buffer));
     m_cameraRollZ = static_cast<float>(atof(buffer));
+    
+    UpdateRender();
+}
+
+void RenderWindow::OnObjectChanged() {
+    // Get object position values from edit controls
+    char buffer[32];
+    
+    GetWindowTextA(m_objectXEdit, buffer, sizeof(buffer));
+    m_objectX = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_objectYEdit, buffer, sizeof(buffer));
+    m_objectY = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_objectZEdit, buffer, sizeof(buffer));
+    m_objectZ = static_cast<float>(atof(buffer));
     
     UpdateRender();
 }
@@ -444,31 +456,31 @@ void RenderWindow::OnLightingChanged() {
 }
 
 void RenderWindow::UpdateRender() {
-    // Set up matrices - 支持完整的XYZ旋转
-    Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(0, 0, -5)) * 
+    // Set up matrices - 使用物体坐标参数代替固定的(0,0,-5)
+    Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(m_objectX, m_objectY, m_objectZ)) * 
                            VectorMath::rotate(m_rotationZ, Vec3f(0, 0, 1)) *  // Z轴旋转
                            VectorMath::rotate(m_rotationY, Vec3f(0, 1, 0)) *  // Y轴旋转
                            VectorMath::rotate(m_rotationX, Vec3f(1, 0, 0)) *  // X轴旋转
                            VectorMath::scale(Vec3f(0.5f, 0.5f, 0.5f));
     
-    // 计算带有XYZ三轴旋转的摄像机变换
-    Vec3f cameraPos(m_cameraX, m_cameraY, m_cameraZ);
-    Vec3f target(0, 0, 0);
-    
-    // 基础的LookAt矩阵
-    Vec3f forward = (target - cameraPos).normalize();
+    // 摄像机固定在原点，朝向原点，应用摄像机角度旋转
+    Vec3f cameraPos(0, 0, 0);  // 摄像机固定在原点
+    Vec3f target(0, 0, -1);    // 摄像机朝向负Z方向
     Vec3f worldUp(0, 1, 0);
-    Vec3f right = forward.cross(worldUp).normalize();
-    Vec3f up = right.cross(forward).normalize();
     
-    Matrix4x4 baseLookAt = VectorMath::lookAt(cameraPos, target, up);
+    // 创建基础视图矩阵（摄像机在原点朝向-Z）
+    Matrix4x4 baseViewMatrix;
+    baseViewMatrix(0, 0) = 1;  baseViewMatrix(0, 1) = 0;  baseViewMatrix(0, 2) = 0;  baseViewMatrix(0, 3) = 0;
+    baseViewMatrix(1, 0) = 0;  baseViewMatrix(1, 1) = 1;  baseViewMatrix(1, 2) = 0;  baseViewMatrix(1, 3) = 0;
+    baseViewMatrix(2, 0) = 0;  baseViewMatrix(2, 1) = 0;  baseViewMatrix(2, 2) = 1;  baseViewMatrix(2, 3) = 0;
+    baseViewMatrix(3, 0) = 0;  baseViewMatrix(3, 1) = 0;  baseViewMatrix(3, 2) = 0;  baseViewMatrix(3, 3) = 1;
     
     // 应用摄像机的XYZ轴旋转
     Matrix4x4 cameraRotation = VectorMath::rotate(m_cameraRollZ, Vec3f(0, 0, 1)) *  // Z轴旋转 (Roll)
                               VectorMath::rotate(m_cameraRollY, Vec3f(0, 1, 0)) *  // Y轴旋转 (Yaw)
                               VectorMath::rotate(m_cameraRollX, Vec3f(1, 0, 0));   // X轴旋转 (Pitch)
     
-    Matrix4x4 viewMatrix = baseLookAt * cameraRotation;
+    Matrix4x4 viewMatrix = baseViewMatrix * cameraRotation;
     
     Matrix4x4 projectionMatrix = VectorMath::perspective(m_fov, 
         (float)m_renderWidth / m_renderHeight, 0.1f, 100.0f);
@@ -511,21 +523,39 @@ void RenderWindow::UpdateRender() {
     m_renderer->clear(Color(50, 50, 100));
     m_renderer->clearDepth();
     
-    if (m_model->getFaceCount() > 0) {
-        // 渲染模型（包括三角形和边界线）
-        m_renderer->renderModel(*m_model);
-    }
-    
-    // 在模型渲染后绘制坐标轴、网格、光源位置和光线
-    // 这样它们不会被SSAA的下采样过程覆盖
-    m_renderer->drawGrid(5.0f, 5);   // 5单位大小，5个分割（每1单位一条线）
-    m_renderer->drawAxes(2.0f);      // 2单位长度的坐标轴
-    m_renderer->drawAllLightPositions(); // 绘制所有光源位置
-    
-    if (m_model->getFaceCount() > 0) {
-        // 根据开关决定是否绘制光线
-        if (m_renderer->getDrawLightRays()) {
-            m_renderer->drawLightRays(*m_model); // 绘制光线到顶点
+    // 在SSAA模式下，需要在模型渲染前绘制网格和坐标轴，这样它们能被正确遮挡
+    if (m_renderer->isSSAAEnabled()) {
+        // 先绘制背景元素（网格、坐标轴）
+        m_renderer->drawGrid(5.0f, 5);   // 5单位大小，5个分割（每1单位一条线）
+        m_renderer->drawAxes(2.0f);      // 2单位长度的坐标轴
+        
+        // 然后渲染模型（在高分辨率下，会被正确遮挡）
+        if (m_model->getFaceCount() > 0) {
+            m_renderer->renderModel(*m_model);
+        }
+        
+        // 最后绘制光源位置和光线（总是显示在最前面）
+        m_renderer->drawAllLightPositions();
+        if (m_model->getFaceCount() > 0) {
+            if (m_renderer->getDrawLightRays()) {
+                m_renderer->drawLightRays(*m_model);
+            }
+        }
+    } else {
+        // 非SSAA模式下，先渲染模型
+        if (m_model->getFaceCount() > 0) {
+            m_renderer->renderModel(*m_model);
+        }
+        
+        // 然后绘制其他元素
+        m_renderer->drawGrid(5.0f, 5);
+        m_renderer->drawAxes(2.0f);
+        m_renderer->drawAllLightPositions();
+        
+        if (m_model->getFaceCount() > 0) {
+            if (m_renderer->getDrawLightRays()) {
+                m_renderer->drawLightRays(*m_model);
+            }
         }
     }
     
@@ -591,6 +621,17 @@ void RenderWindow::OnToggleRays() {
     // 更新按钮文本
     const char* newText = (!currentState) ? "Rays: ON" : "Rays: OFF";
     SetWindowTextA(m_toggleRaysBtn, newText);
+    
+    UpdateRender();
+}
+
+void RenderWindow::OnToggleTexture() {
+    bool currentState = m_renderer->isTextureEnabled();
+    m_renderer->setTextureEnabled(!currentState);
+    
+    // 更新按钮文本
+    const char* newText = (!currentState) ? "Texture: ON" : "Texture: OFF";
+    SetWindowTextA(m_toggleTextureBtn, newText);
     
     UpdateRender();
 }
