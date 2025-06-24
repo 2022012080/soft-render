@@ -16,8 +16,3 @@ out/
 *.exp
 *.ilk
 
-# 忽略输出图像文件
-*.bmp
-*.png
-*.jpg
-*.jpeg 
