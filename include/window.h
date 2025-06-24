@@ -29,15 +29,17 @@ public:
     void OnSSAAScaleIncrease();
     void OnSSAAScaleDecrease();
     
+    void OnCameraChanged();
+    void OnRotationChanged();
+    void OnLightChanged();
+    void OnLight2Changed(); // 新增：第二个光源变化处理
+    void RenderToWindow();
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
     
     void CreateControls();
-    void OnCameraChanged();
-    void OnRotationChanged();
-    void OnLightChanged();
-    void RenderToWindow();
     void UpdateSSAAControls();
     
     // Window handles
@@ -47,7 +49,8 @@ private:
     HWND m_rotationXEdit, m_rotationYEdit, m_rotationZEdit;
     HWND m_cameraRollXEdit, m_cameraRollYEdit, m_cameraRollZEdit; // 摄像机XYZ轴旋转
     HWND m_lightXEdit, m_lightYEdit, m_lightZEdit, m_lightIntensityEdit;
-    HWND m_cameraLabel, m_rotationLabel, m_cameraRollLabel, m_lightLabel;
+    HWND m_light2XEdit, m_light2YEdit, m_light2ZEdit, m_light2IntensityEdit; // 第二个光源
+    HWND m_cameraLabel, m_rotationLabel, m_cameraRollLabel, m_lightLabel, m_light2Label;
     
     // 新增：FOV控制按钮
     HWND m_fovIncreaseBtn, m_fovDecreaseBtn;
@@ -78,6 +81,7 @@ private:
     
     // Light settings
     float m_lightX, m_lightY, m_lightZ, m_lightIntensity;
+    float m_light2X, m_light2Y, m_light2Z, m_light2Intensity; // 第二个光源设置
     
     // DIB for displaying
     HBITMAP m_bitmap;
@@ -111,4 +115,10 @@ private:
     static const int ID_TOGGLE_SSAA = 1019;
     static const int ID_SSAA_SCALE_INC = 1020;
     static const int ID_SSAA_SCALE_DEC = 1021;
+    
+    // 新增：第二个光源控制ID
+    static const int ID_LIGHT2_X = 1022;
+    static const int ID_LIGHT2_Y = 1023;
+    static const int ID_LIGHT2_Z = 1024;
+    static const int ID_LIGHT2_INTENSITY = 1025;
 }; 

@@ -13,6 +13,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_cameraRollX(0.0f), m_cameraRollY(0.0f), m_cameraRollZ(0.0f)
     , m_fov(20.0f)  // 初始FOV为20度
     , m_lightX(3.0f), m_lightY(3.0f), m_lightZ(3.0f), m_lightIntensity(10.0f)
+    , m_light2X(-3.0f), m_light2Y(2.0f), m_light2Z(1.0f), m_light2Intensity(5.0f) // 第二个光源
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
 {
@@ -157,41 +158,61 @@ void RenderWindow::CreateControls() {
     m_lightIntensityEdit = CreateWindowA("EDIT", "10", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1220, 285, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
     
+    // 新增：第二个光源控制
+    m_light2Label = CreateWindowA("STATIC", "Light 2 Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
+        1220, 320, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_light2XEdit = CreateWindowA("EDIT", "-3", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1220, 345, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_X, GetModuleHandle(nullptr), nullptr);
+    
+    m_light2YEdit = CreateWindowA("EDIT", "2", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1290, 345, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_Y, GetModuleHandle(nullptr), nullptr);
+    
+    m_light2ZEdit = CreateWindowA("EDIT", "1", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1360, 345, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_Z, GetModuleHandle(nullptr), nullptr);
+    
+    // Light 2 intensity control
+    CreateWindowA("STATIC", "Light 2 Intensity:", WS_VISIBLE | WS_CHILD,
+        1220, 380, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_light2IntensityEdit = CreateWindowA("EDIT", "5", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1220, 405, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_INTENSITY, GetModuleHandle(nullptr), nullptr);
+    
     // FOV controls
     CreateWindowA("STATIC", "Field of View (FOV):", WS_VISIBLE | WS_CHILD,
-        1220, 320, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 440, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_fovDecreaseBtn = CreateWindowA("BUTTON", "(-)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
+        1220, 490, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
     
     m_fovIncreaseBtn = CreateWindowA("BUTTON", "(+)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1310, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
+        1310, 490, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
     
     // 新增：绘制控制按钮
     CreateWindowA("STATIC", "Render Controls:", WS_VISIBLE | WS_CHILD,
-        1220, 420, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 540, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edges: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 450, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
+        1220, 570, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
     
     m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1330, 450, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
+        1330, 570, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
     
     // 新增：SSAA控制
     CreateWindowA("STATIC", "SSAA (Super Sampling):", WS_VISIBLE | WS_CHILD,
-        1220, 490, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 610, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_toggleSSAABtn = CreateWindowA("BUTTON", "SSAA: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 515, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
+        1220, 635, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaScaleDecBtn = CreateWindowA("BUTTON", "Scale -", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1330, 515, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
+        1330, 635, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaScaleIncBtn = CreateWindowA("BUTTON", "Scale +", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1410, 515, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
+        1410, 635, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaStatusLabel = CreateWindowA("STATIC", "SSAA: OFF (1x)", WS_VISIBLE | WS_CHILD,
-        1220, 555, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 675, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
@@ -242,6 +263,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnCameraChanged();  // 摄像机roll角度变化也调用OnCameraChanged
             } else if (controlId >= ID_LIGHT_X && controlId <= ID_LIGHT_INTENSITY) {
                 OnLightChanged();
+            } else if (controlId >= ID_LIGHT2_X && controlId <= ID_LIGHT2_INTENSITY) {
+                OnLight2Changed();
             }
         } else if (HIWORD(wParam) == BN_CLICKED) {
             int controlId = LOWORD(wParam);
@@ -347,6 +370,25 @@ void RenderWindow::OnLightChanged() {
     UpdateRender();
 }
 
+void RenderWindow::OnLight2Changed() {
+    // Get light values from edit controls
+    char buffer[32];
+    
+    GetWindowTextA(m_light2XEdit, buffer, sizeof(buffer));
+    m_light2X = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_light2YEdit, buffer, sizeof(buffer));
+    m_light2Y = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_light2ZEdit, buffer, sizeof(buffer));
+    m_light2Z = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_light2IntensityEdit, buffer, sizeof(buffer));
+    m_light2Intensity = static_cast<float>(atof(buffer));
+    
+    UpdateRender();
+}
+
 void RenderWindow::UpdateRender() {
     // Set up matrices - 支持完整的XYZ旋转
     Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(0, 0, -5)) * 
@@ -389,9 +431,21 @@ void RenderWindow::UpdateRender() {
     m_renderer->setProjectionMatrix(projectionMatrix);
     m_renderer->setViewportMatrix(viewportMatrix);
     
-    m_renderer->setLightPosition(Vec3f(m_lightX, m_lightY, m_lightZ));
-    m_renderer->setLightColor(Vec3f(1, 1, 1));
-    m_renderer->setLightIntensity(m_lightIntensity);
+    // 更新多光源系统
+    if (m_renderer->getLightCount() >= 2) {
+        // 更新第一个光源
+        Light& light1 = m_renderer->getLight(0);
+        light1.position = Vec3f(m_lightX, m_lightY, m_lightZ);
+        light1.color = Vec3f(1, 1, 1); // 白色
+        light1.intensity = m_lightIntensity;
+        
+        // 更新第二个光源
+        Light& light2 = m_renderer->getLight(1);
+        light2.position = Vec3f(m_light2X, m_light2Y, m_light2Z);
+        light2.color = Vec3f(0.8, 0.6, 1.0); // 紫色
+        light2.intensity = m_light2Intensity;
+    }
+    
     m_renderer->setAmbientIntensity(0.3f);
     
     // Clear and render
@@ -401,7 +455,7 @@ void RenderWindow::UpdateRender() {
     // 先绘制坐标轴和网格
     m_renderer->drawGrid(5.0f, 5);   // 5单位大小，5个分割（每1单位一条线）
     m_renderer->drawAxes(2.0f);      // 2单位长度的坐标轴
-    m_renderer->drawLightPosition(); // 绘制光源位置
+    m_renderer->drawAllLightPositions(); // 绘制所有光源位置
     
     if (m_model->getFaceCount() > 0) {
         // 根据开关决定是否绘制光线

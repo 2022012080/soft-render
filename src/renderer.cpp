@@ -14,11 +14,12 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     m_highResWidth = 0;
     m_highResHeight = 0;
     
-    // 初始化点光源参数
-    lightPosition = Vec3f(3, 3, 3);
-    lightColor = Vec3f(1, 1, 1);
-    lightIntensity = 10.0f;
+    // 初始化多光源系统
     ambientIntensity = 0.2f;
+    
+    // 添加默认光源
+    lights.push_back(Light(Vec3f(3, 3, 3), Vec3f(1, 1, 1), 10.0f));  // 白色主光源
+    lights.push_back(Light(Vec3f(-3, 2, 1), Vec3f(0.8, 0.6, 1.0), 5.0f));  // 紫色辅助光源
     
     // 初始化绘制控制开关
     m_drawTriangleEdges = true;
@@ -170,24 +171,27 @@ void Renderer::renderTriangleHighRes(const Vertex& v0, const Vertex& v1, const V
 }
 
 void Renderer::rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
-    int x0 = static_cast<int>(v0.position.x);
-    int y0 = static_cast<int>(v0.position.y);
-    int x1 = static_cast<int>(v1.position.x);
-    int y1 = static_cast<int>(v1.position.y);
-    int x2 = static_cast<int>(v2.position.x);
-    int y2 = static_cast<int>(v2.position.y);
+    // 保持浮点数精度，避免提前转换为整数导致三角形退化
+    float x0 = v0.position.x;
+    float y0 = v0.position.y;
+    float x1 = v1.position.x;
+    float y1 = v1.position.y;
+    float x2 = v2.position.x;
+    float y2 = v2.position.y;
     
-    int minX = std::max(0, std::min({x0, x1, x2}));
-    int maxX = std::min(m_highResWidth - 1, std::max({x0, x1, x2}));
-    int minY = std::max(0, std::min({y0, y1, y2}));
-    int maxY = std::min(m_highResHeight - 1, std::max({y0, y1, y2}));
-    
+    // 计算边界框（使用浮点数）
+    int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
+    int maxX = std::min(m_highResWidth - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
+    int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
+    int maxY = std::min(m_highResHeight - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
+
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
-            Vec3f bary = barycentric(Vec2f(static_cast<float>(x0), static_cast<float>(y0)), 
-                                   Vec2f(static_cast<float>(x1), static_cast<float>(y1)), 
-                                   Vec2f(static_cast<float>(x2), static_cast<float>(y2)), 
-                                   Vec2f(static_cast<float>(x), static_cast<float>(y)));
+            // 使用浮点数坐标进行重心坐标计算，保持精度
+            Vec3f bary = barycentric(Vec2f(x0, y0), 
+                                   Vec2f(x1, y1), 
+                                   Vec2f(x2, y2), 
+                                   Vec2f(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f));
             
             if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
                 float depth = bary.x * v0.position.z + bary.y * v1.position.z + bary.z * v2.position.z;
@@ -355,24 +359,27 @@ Color Renderer::fragmentShader(const ShaderFragment& fragment) {
 }
 
 void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
-    int x0 = static_cast<int>(v0.position.x);
-    int y0 = static_cast<int>(v0.position.y);
-    int x1 = static_cast<int>(v1.position.x);
-    int y1 = static_cast<int>(v1.position.y);
-    int x2 = static_cast<int>(v2.position.x);
-    int y2 = static_cast<int>(v2.position.y);
+    // 保持浮点数精度，避免提前转换为整数导致三角形退化
+    float x0 = v0.position.x;
+    float y0 = v0.position.y;
+    float x1 = v1.position.x;
+    float y1 = v1.position.y;
+    float x2 = v2.position.x;
+    float y2 = v2.position.y;
     
-    int minX = std::max(0, std::min({x0, x1, x2}));
-    int maxX = std::min(width - 1, std::max({x0, x1, x2}));
-    int minY = std::max(0, std::min({y0, y1, y2}));
-    int maxY = std::min(height - 1, std::max({y0, y1, y2}));
+    // 计算边界框（使用浮点数）
+    int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
+    int maxX = std::min(width - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
+    int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
+    int maxY = std::min(height - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
     
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
-            Vec3f bary = barycentric(Vec2f(static_cast<float>(x0), static_cast<float>(y0)), 
-                                   Vec2f(static_cast<float>(x1), static_cast<float>(y1)), 
-                                   Vec2f(static_cast<float>(x2), static_cast<float>(y2)), 
-                                   Vec2f(static_cast<float>(x), static_cast<float>(y)));
+            // 使用浮点数坐标进行重心坐标计算，保持精度
+            Vec3f bary = barycentric(Vec2f(x0, y0), 
+                                   Vec2f(x1, y1), 
+                                   Vec2f(x2, y2), 
+                                   Vec2f(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f));
             
             if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
                 float depth = bary.x * v0.position.z + bary.y * v1.position.z + bary.z * v2.position.z;
@@ -444,17 +451,32 @@ Vec3f Renderer::calculateLighting(const Vec3f& localPos, const Vec3f& localNorma
     // 环境光 - 增强强度，让场景更明亮
     Vec3f ambient = baseColor * (ambientIntensity * 0.6f); // 提高到60%
     
+    // 初始化总光照贡献
+    Vec3f totalLighting = ambient;
+    
+    // 计算所有光源的贡献
+    for (const auto& light : lights) {
+        if (light.enabled) {
+            totalLighting += calculateSingleLight(light, localPos, localNormal, baseColor);
+        }
+    }
+    
+    return totalLighting;
+}
+
+Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
     // 在本地坐标系中计算光照（光源位置和表面位置都是本地坐标）
-    Vec3f lightVector = lightPosition - localPos;
+    Vec3f lightVector = light.position - localPos;
     float distance = lightVector.length();
     Vec3f lightDir = lightVector.normalize();
     
-    // 计算衰减（距离的平方衰减）
-    float attenuation = lightIntensity / (1.0f + 0.1f * distance + 0.01f * distance * distance);
+    // 计算标准距离衰减（I/r²）
+    float r_squared = distance * distance;
+    float attenuation = light.intensity / r_squared;
     
     // 漫反射光照（Lambert模型） - 使用本地坐标系的法向量
     float diffuseStrength = std::max(0.0f, localNormal.dot(lightDir));
-    Vec3f diffuse = baseColor * lightColor * diffuseStrength * attenuation;
+    Vec3f diffuse = baseColor * light.color * diffuseStrength * attenuation;
     
     // 高光计算 - 只有当表面面向光源时才计算
     Vec3f specular(0, 0, 0);
@@ -467,10 +489,13 @@ Vec3f Renderer::calculateLighting(const Vec3f& localPos, const Vec3f& localNorma
         // 镜面反射光照（Phong模型）
         Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;
         float specularStrength = std::pow(std::max(0.0f, viewDir.dot(reflectDir)), 32.0f);
-        specular = lightColor * specularStrength * attenuation * 0.5f;
+        
+        // 标准物理高光公式：Ks × (I/r²) × (V·R)^shininess
+        float Ks = 0.5f;  // 镜面反射系数
+        specular = light.color * Ks * attenuation * specularStrength;
     }
     
-    return ambient + diffuse + specular;
+    return diffuse + specular;
 }
 
 bool Renderer::isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2) {
@@ -713,10 +738,24 @@ void Renderer::drawGrid(float size, int divisions) {
     }
 }
 
-// 绘制光源位置
+// 绘制光源位置（保持向后兼容，绘制第一个光源）
 void Renderer::drawLightPosition() {
+    if (!lights.empty()) {
+        drawSingleLightPosition(lights[0]);
+    }
+}
+
+// 绘制所有光源位置
+void Renderer::drawAllLightPositions() {
+    for (size_t i = 0; i < lights.size(); i++) {
+        drawSingleLightPosition(lights[i], i);
+    }
+}
+
+// 绘制单个光源位置
+void Renderer::drawSingleLightPosition(const Light& light, int lightIndex) {
     // 将光源位置从本地坐标系变换到世界坐标系
-    Vec3f worldLightPos = modelMatrix * lightPosition;
+    Vec3f worldLightPos = modelMatrix * light.position;
     
     // 将世界坐标的光源位置转换到屏幕坐标
     Vec3f viewLightPos = viewMatrix * worldLightPos;
@@ -727,8 +766,8 @@ void Renderer::drawLightPosition() {
     int ly = static_cast<int>(screenLightPos.y);
     float lz = screenLightPos.z;
     
-    // 绘制光源标记（白色圆圈，比原点标记稍大）
-    Color lightColor(255, 255, 255); // 白色
+    // 根据光源颜色绘制光源标记
+    Color lightColor = Color::fromVec3f(light.color * 255.0f);
     int radius = 5; // 半径为5像素
     
     for (int dx = -radius; dx <= radius; dx++) {
@@ -742,9 +781,9 @@ void Renderer::drawLightPosition() {
                         // 根据距离中心的远近调整亮度，创造渐变效果
                         float alpha = 1.0f - (distance / radius);
                         Color pixelColor(
-                            static_cast<unsigned char>(255 * alpha),
-                            static_cast<unsigned char>(255 * alpha),
-                            static_cast<unsigned char>(255 * alpha)
+                            static_cast<unsigned char>(lightColor.r * alpha),
+                            static_cast<unsigned char>(lightColor.g * alpha),
+                            static_cast<unsigned char>(lightColor.b * alpha)
                         );
                         setPixel(px, py, pixelColor, lz);
                     }
@@ -778,12 +817,14 @@ void Renderer::drawLightPosition() {
 // 绘制光线到模型顶点
 void Renderer::drawLightRays(const Model& model) {
     const auto& vertices = model.getVertices();
-    Color rayColor(255, 255, 150, 100); // 半透明浅黄色
     
-    // 直接使用本地坐标系中的光源位置
-    Vec3f localLightPos = lightPosition;
+    // 为每个光源使用不同的颜色
+    std::vector<Color> rayColors = {
+        Color(255, 255, 150, 100),  // 浅黄色 - 第一个光源
+        Color(255, 150, 255, 100)   // 浅紫色 - 第二个光源
+    };
     
-    // 遍历所有顶点，绘制从本地光源到每个顶点的连线
+    // 遍历所有顶点，绘制从每个光源到顶点的连线
     std::vector<Vec3f> uniquePositions;
     
     // 收集唯一的顶点位置（避免重复绘制到同一个位置的光线）
@@ -806,23 +847,58 @@ void Renderer::drawLightRays(const Model& model) {
         }
     }
     
-    // 绘制从本地光源到每个唯一顶点位置的光线
-    for (const auto& vertexPos : uniquePositions) {
-        // 计算光线方向
-        Vec3f lightToVertex = vertexPos - localLightPos;
-        float distance = lightToVertex.length();
+    // 为每个光源绘制光线
+    for (size_t lightIndex = 0; lightIndex < lights.size() && lightIndex < rayColors.size(); lightIndex++) {
+        const Light& light = lights[lightIndex];
+        Color rayColor = rayColors[lightIndex];
         
-        // 只绘制一定距离内的光线，避免过长的线条
-        if (distance < 10.0f) {
-            // 在本地坐标系中绘制光线，drawLine会自动应用modelMatrix变换
-            drawLine(localLightPos, vertexPos, rayColor, 1.0f);
+        // 绘制从当前光源到每个唯一顶点位置的光线
+        for (const auto& vertexPos : uniquePositions) {
+            // 计算光线方向
+            Vec3f lightToVertex = vertexPos - light.position;
+            float distance = lightToVertex.length();
+            
+            // 只绘制一定距离内的光线，避免过长的线条
+            if (distance < 10.0f) {
+                // 在本地坐标系中绘制光线，drawLine会自动应用modelMatrix变换
+                drawLine(light.position, vertexPos, rayColor, 1.0f);
+            }
         }
     }
 }
 
 void Renderer::drawTriangleEdges(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
     // 绘制三角形边线 - 使用本地坐标，增加线宽防止断线
-    drawLine(v0.localPos, v1.localPos, Color(0, 0, 0), 3.0f);  // 黑色边线，宽度3像素
-    drawLine(v1.localPos, v2.localPos, Color(0, 0, 0), 3.0f);
-    drawLine(v2.localPos, v0.localPos, Color(0, 0, 0), 3.0f);
-} 
+    drawLine(v0.localPos, v1.localPos, Color(0, 0, 0), 2.0f);  // 黑色边线，宽度3像素
+    drawLine(v1.localPos, v2.localPos, Color(0, 0, 0), 2.0f);
+    drawLine(v2.localPos, v0.localPos, Color(0, 0, 0), 2.0f);
+}
+
+// 新增：光源管理方法实现
+void Renderer::setLight(int index, const Light& light) {
+    if (index >= 0 && index < lights.size()) {
+        lights[index] = light;
+    }
+}
+
+void Renderer::removeLight(int index) {
+    if (index >= 0 && index < lights.size()) {
+        lights.erase(lights.begin() + index);
+    }
+}
+
+const Light& Renderer::getLight(int index) const {
+    static Light defaultLight;
+    if (index >= 0 && index < lights.size()) {
+        return lights[index];
+    }
+    return defaultLight;
+}
+
+Light& Renderer::getLight(int index) {
+    static Light defaultLight;
+    if (index >= 0 && index < lights.size()) {
+        return lights[index];
+    }
+    return defaultLight;
+}

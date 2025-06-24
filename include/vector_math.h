@@ -40,6 +40,12 @@ struct Vec3f {
     Vec3f operator*(const Vec3f& v) const { return Vec3f(x * v.x, y * v.y, z * v.z); }
     Vec3f operator/(float f) const { return Vec3f(x / f, y / f, z / f); }
     
+    // 添加复合赋值运算符
+    Vec3f& operator+=(const Vec3f& v) { x += v.x; y += v.y; z += v.z; return *this; }
+    Vec3f& operator-=(const Vec3f& v) { x -= v.x; y -= v.y; z -= v.z; return *this; }
+    Vec3f& operator*=(float f) { x *= f; y *= f; z *= f; return *this; }
+    Vec3f& operator/=(float f) { x /= f; y /= f; z /= f; return *this; }
+    
     float norm() const { return std::sqrt(x * x + y * y + z * z); }
     float length() const { return norm(); }  // 别名方法，和norm()功能相同
     Vec3f normalize() const { float n = norm(); return n > 0 ? *this / n : Vec3f(0, 0, 0); }

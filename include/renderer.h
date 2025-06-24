@@ -14,6 +14,18 @@ struct Pixel {
     Pixel(const Color& c, float d) : color(c), depth(d) {}
 };
 
+// 光源结构体
+struct Light {
+    Vec3f position;
+    Vec3f color;
+    float intensity;
+    bool enabled;
+    
+    Light() : position(0, 0, 0), color(1, 1, 1), intensity(1.0f), enabled(true) {}
+    Light(const Vec3f& pos, const Vec3f& col, float intens) 
+        : position(pos), color(col), intensity(intens), enabled(true) {}
+};
+
 // 渲染器类
 class Renderer {
 private:
@@ -38,10 +50,8 @@ private:
     // 纹理
     std::shared_ptr<Texture> currentTexture;
     
-    // 点光源参数
-    Vec3f lightPosition;
-    Vec3f lightColor;
-    float lightIntensity;
+    // 多光源系统
+    std::vector<Light> lights;
     float ambientIntensity;
     
     // 新增：绘制控制开关
@@ -73,10 +83,14 @@ public:
     // 设置纹理
     void setTexture(std::shared_ptr<Texture> texture) { currentTexture = texture; }
     
-    // 设置点光源
-    void setLightPosition(const Vec3f& pos) { lightPosition = pos; }
-    void setLightColor(const Vec3f& color) { lightColor = color; }
-    void setLightIntensity(float intensity) { lightIntensity = intensity; }
+    // 设置多光源
+    void addLight(const Light& light) { lights.push_back(light); }
+    void setLight(int index, const Light& light);
+    void removeLight(int index);
+    void clearLights() { lights.clear(); }
+    int getLightCount() const { return lights.size(); }
+    const Light& getLight(int index) const;
+    Light& getLight(int index);
     void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
     
     // 新增：设置绘制控制开关
@@ -113,6 +127,9 @@ public:
     
     // 新增：绘制光源位置
     void drawLightPosition();
+    
+    // 新增：绘制所有光源位置
+    void drawAllLightPositions();
     
     // 新增：绘制光线到模型顶点
     void drawLightRays(const Model& model);
@@ -177,6 +194,9 @@ private:
     // 计算光照
     Vec3f calculateLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
     
+    // 计算单个光源的光照贡献
+    Vec3f calculateSingleLight(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
+    
     // 正面剔除
     bool isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2);
     
@@ -185,4 +205,7 @@ private:
     
     // 更新法向量变换矩阵
     void updateNormalMatrix();
+    
+    // 绘制单个光源位置
+    void drawSingleLightPosition(const Light& light, int lightIndex = 0);
 }; 
