@@ -20,6 +20,10 @@ public:
     void OnFovIncrease();
     void OnFovDecrease();
     
+    // 新增：绘制控制方法
+    void OnToggleEdges();
+    void OnToggleRays();
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -41,6 +45,9 @@ private:
     
     // 新增：FOV控制按钮
     HWND m_fovIncreaseBtn, m_fovDecreaseBtn;
+    
+    // 新增：绘制控制按钮
+    HWND m_toggleEdgesBtn, m_toggleRaysBtn;
     
     // Rendering
     std::unique_ptr<Renderer> m_renderer;
@@ -85,4 +92,8 @@ private:
     // 新增：FOV控制ID
     static const int ID_FOV_INCREASE = 1011;
     static const int ID_FOV_DECREASE = 1012;
+    
+    // 新增：绘制控制ID
+    static const int ID_TOGGLE_EDGES = 1017;
+    static const int ID_TOGGLE_RAYS = 1018;
 }; 

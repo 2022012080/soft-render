@@ -1,6 +1,6 @@
 import math
 
-def generate_high_res_sphere(radius=2.0, longitude_divisions=64, latitude_divisions=32):
+def generate_high_res_sphere(radius=2.0, longitude_divisions=32, latitude_divisions=16):
     """
     Generate a high-resolution sphere with the specified number of divisions.
     

@@ -37,6 +37,10 @@ private:
     float lightIntensity;
     float ambientIntensity;
     
+    // 新增：绘制控制开关
+    bool m_drawTriangleEdges;
+    bool m_drawLightRays;
+    
 public:
     Renderer(int w, int h);
     
@@ -61,6 +65,12 @@ public:
     void setLightColor(const Vec3f& color) { lightColor = color; }
     void setLightIntensity(float intensity) { lightIntensity = intensity; }
     void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
+    
+    // 新增：设置绘制控制开关
+    void setDrawTriangleEdges(bool draw) { m_drawTriangleEdges = draw; }
+    void setDrawLightRays(bool draw) { m_drawLightRays = draw; }
+    bool getDrawTriangleEdges() const { return m_drawTriangleEdges; }
+    bool getDrawLightRays() const { return m_drawLightRays; }
     
     // 渲染模型
     void renderModel(const Model& model);

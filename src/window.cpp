@@ -7,7 +7,7 @@
 
 RenderWindow::RenderWindow(int width, int height) 
     : m_windowWidth(width), m_windowHeight(height)
-    , m_renderWidth(600), m_renderHeight(450)
+    , m_renderWidth(1200), m_renderHeight(900)
     , m_cameraX(0.0f), m_cameraY(0.0f), m_cameraZ(5.0f)
     , m_rotationX(0.0f), m_rotationY(30.0f), m_rotationZ(0.0f)
     , m_cameraRollX(0.0f), m_cameraRollY(0.0f), m_cameraRollZ(0.0f)
@@ -100,72 +100,82 @@ bool RenderWindow::Initialize() {
 void RenderWindow::CreateControls() {
     // Camera controls - 增加标签宽度和控件间距
     CreateWindowA("STATIC", "Camera Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        620, 20, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 20, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_cameraXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_X, GetModuleHandle(nullptr), nullptr);
+        1220, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_X, GetModuleHandle(nullptr), nullptr);
     
     m_cameraYEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        690, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Y, GetModuleHandle(nullptr), nullptr);
+        1290, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Y, GetModuleHandle(nullptr), nullptr);
     
     m_cameraZEdit = CreateWindowA("EDIT", "5", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        760, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Z, GetModuleHandle(nullptr), nullptr);
+        1360, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_Z, GetModuleHandle(nullptr), nullptr);
     
     // Rotation controls - 增加间距
     CreateWindowA("STATIC", "Model Rotation (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
-        620, 80, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 80, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_rotationXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_X, GetModuleHandle(nullptr), nullptr);
+        1220, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_X, GetModuleHandle(nullptr), nullptr);
     
     m_rotationYEdit = CreateWindowA("EDIT", "30", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        690, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
+        1290, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
     
     m_rotationZEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        760, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Z, GetModuleHandle(nullptr), nullptr);
+        1360, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Z, GetModuleHandle(nullptr), nullptr);
     
     // Camera roll control - XYZ三个轴的旋转
     CreateWindowA("STATIC", "Camera Roll (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
-        620, 140, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 140, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_cameraRollXEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_X, GetModuleHandle(nullptr), nullptr);
+        1220, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_X, GetModuleHandle(nullptr), nullptr);
     
     m_cameraRollYEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        690, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Y, GetModuleHandle(nullptr), nullptr);
+        1290, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Y, GetModuleHandle(nullptr), nullptr);
     
     m_cameraRollZEdit = CreateWindowA("EDIT", "0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        760, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Z, GetModuleHandle(nullptr), nullptr);
+        1360, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Z, GetModuleHandle(nullptr), nullptr);
     
     // Light controls - 增加间距
     CreateWindowA("STATIC", "Light Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        620, 200, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 200, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_lightXEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
+        1220, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
     
     m_lightYEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        690, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
+        1290, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
     
     m_lightZEdit = CreateWindowA("EDIT", "3", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        760, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
+        1360, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
     
     // Light intensity control
     CreateWindowA("STATIC", "Light Intensity:", WS_VISIBLE | WS_CHILD,
-        620, 260, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 260, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_lightIntensityEdit = CreateWindowA("EDIT", "10", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        620, 285, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
+        1220, 285, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
     
     // FOV controls
     CreateWindowA("STATIC", "Field of View (FOV):", WS_VISIBLE | WS_CHILD,
-        620, 320, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 320, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_fovDecreaseBtn = CreateWindowA("BUTTON", "(-)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        620, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
+        1220, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
     
     m_fovIncreaseBtn = CreateWindowA("BUTTON", "(+)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        710, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
+        1310, 370, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
+    
+    // 新增：绘制控制按钮
+    CreateWindowA("STATIC", "Render Controls:", WS_VISIBLE | WS_CHILD,
+        1220, 420, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edges: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1220, 450, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
+    
+    m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1330, 450, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
     
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
@@ -223,6 +233,10 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnFovIncrease();
             } else if (controlId == ID_FOV_DECREASE) {
                 OnFovDecrease();
+            } else if (controlId == ID_TOGGLE_EDGES) {
+                OnToggleEdges();
+            } else if (controlId == ID_TOGGLE_RAYS) {
+                OnToggleRays();
             }
         }
         return 0;
@@ -368,7 +382,10 @@ void RenderWindow::UpdateRender() {
     m_renderer->drawLightPosition(); // 绘制光源位置
     
     if (m_model->getFaceCount() > 0) {
-        m_renderer->drawLightRays(*m_model); // 绘制光线到顶点
+        // 根据开关决定是否绘制光线
+        if (m_renderer->getDrawLightRays()) {
+            m_renderer->drawLightRays(*m_model); // 绘制光线到顶点
+        }
         m_renderer->renderModel(*m_model);
     }
     
@@ -413,5 +430,27 @@ void RenderWindow::OnFovDecrease() {
     if (m_fov < 10.0f) {  // 限制最小FOV为10度
         m_fov = 10.0f;
     }
+    UpdateRender();
+}
+
+void RenderWindow::OnToggleEdges() {
+    bool currentState = m_renderer->getDrawTriangleEdges();
+    m_renderer->setDrawTriangleEdges(!currentState);
+    
+    // 更新按钮文本
+    const char* newText = (!currentState) ? "Edges: ON" : "Edges: OFF";
+    SetWindowTextA(m_toggleEdgesBtn, newText);
+    
+    UpdateRender();
+}
+
+void RenderWindow::OnToggleRays() {
+    bool currentState = m_renderer->getDrawLightRays();
+    m_renderer->setDrawLightRays(!currentState);
+    
+    // 更新按钮文本
+    const char* newText = (!currentState) ? "Rays: ON" : "Rays: OFF";
+    SetWindowTextA(m_toggleRaysBtn, newText);
+    
     UpdateRender();
 } 

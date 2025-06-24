@@ -14,6 +14,10 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     lightIntensity = 10.0f;
     ambientIntensity = 0.2f;
     
+    // 初始化绘制控制开关
+    m_drawTriangleEdges = true;
+    m_drawLightRays = true;
+    
     // 初始化法向量变换矩阵
     updateNormalMatrix();
 }
@@ -61,8 +65,10 @@ void Renderer::renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& 
     // 渲染三角形面
     rasterizeTriangle(sv0, sv1, sv2);
     
-    // 绘制三角形边线
-    drawTriangleEdges(sv0, sv1, sv2);
+    // 绘制三角形边线（根据开关决定）
+    if (m_drawTriangleEdges) {
+        drawTriangleEdges(sv0, sv1, sv2);
+    }
 }
 
 Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {

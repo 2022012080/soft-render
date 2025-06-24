@@ -9,16 +9,16 @@
 #endif
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    std::cout << "软光栅渲染器启动中..." << std::endl;
+    std::cout << "Soft Renderer starting..." << std::endl;
     
-    RenderWindow window(900, 720);
+    RenderWindow window(1800, 1440);
     
     if (!window.Initialize()) {
-        std::cerr << "窗口初始化失败!" << std::endl;
+        std::cerr << "Window initialization failed!" << std::endl;
         return -1;
     }
     
-    std::cout << "窗口创建成功，开始GUI模式..." << std::endl;
+    std::cout << "Window created successfully, starting GUI mode..." << std::endl;
     window.Run();
     
     return 0;
