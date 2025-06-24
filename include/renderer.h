@@ -54,6 +54,11 @@ private:
     std::vector<Light> lights;
     float ambientIntensity;
     
+    // 新增：光照系数控制
+    float diffuseStrength;    // 漫反射强度系数
+    float specularStrength;   // 高光强度系数
+    float ambientStrength;    // 环境光强度系数
+    
     // 新增：绘制控制开关
     bool m_drawTriangleEdges;
     bool m_drawLightRays;
@@ -92,6 +97,14 @@ public:
     const Light& getLight(int index) const;
     Light& getLight(int index);
     void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
+    
+    // 新增：光照系数控制方法
+    void setDiffuseStrength(float strength) { diffuseStrength = strength; }
+    void setSpecularStrength(float strength) { specularStrength = strength; }
+    void setAmbientStrength(float strength) { ambientStrength = strength; }
+    float getDiffuseStrength() const { return diffuseStrength; }
+    float getSpecularStrength() const { return specularStrength; }
+    float getAmbientStrength() const { return ambientStrength; }
     
     // 新增：设置绘制控制开关
     void setDrawTriangleEdges(bool draw) { m_drawTriangleEdges = draw; }

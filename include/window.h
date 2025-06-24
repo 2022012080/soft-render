@@ -33,6 +33,7 @@ public:
     void OnRotationChanged();
     void OnLightChanged();
     void OnLight2Changed(); // 新增：第二个光源变化处理
+    void OnLightingChanged(); // 新增：光照系数变化处理
     void RenderToWindow();
     
 private:
@@ -51,6 +52,10 @@ private:
     HWND m_lightXEdit, m_lightYEdit, m_lightZEdit, m_lightIntensityEdit;
     HWND m_light2XEdit, m_light2YEdit, m_light2ZEdit, m_light2IntensityEdit; // 第二个光源
     HWND m_cameraLabel, m_rotationLabel, m_cameraRollLabel, m_lightLabel, m_light2Label;
+    
+    // 新增：光照系数控件
+    HWND m_diffuseEdit, m_specularEdit, m_ambientEdit;
+    HWND m_lightingLabel;
     
     // 新增：FOV控制按钮
     HWND m_fovIncreaseBtn, m_fovDecreaseBtn;
@@ -82,6 +87,9 @@ private:
     // Light settings
     float m_lightX, m_lightY, m_lightZ, m_lightIntensity;
     float m_light2X, m_light2Y, m_light2Z, m_light2Intensity; // 第二个光源设置
+    
+    // 新增：光照系数设置
+    float m_diffuseStrength, m_specularStrength, m_ambientStrength;
     
     // DIB for displaying
     HBITMAP m_bitmap;
@@ -121,4 +129,9 @@ private:
     static const int ID_LIGHT2_Y = 1023;
     static const int ID_LIGHT2_Z = 1024;
     static const int ID_LIGHT2_INTENSITY = 1025;
+    
+    // 新增：光照系数控制ID
+    static const int ID_DIFFUSE_STRENGTH = 1026;
+    static const int ID_SPECULAR_STRENGTH = 1027;
+    static const int ID_AMBIENT_STRENGTH = 1028;
 }; 

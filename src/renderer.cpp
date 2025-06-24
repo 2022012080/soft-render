@@ -17,6 +17,11 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 初始化多光源系统
     ambientIntensity = 0.2f;
     
+    // 初始化光照系数
+    diffuseStrength = 1.0f;     // 漫反射强度
+    specularStrength = 1.0f;    // 高光强度
+    ambientStrength = 1.0f;     // 环境光强度
+    
     // 添加默认光源
     lights.push_back(Light(Vec3f(3, 3, 3), Vec3f(1, 1, 1), 10.0f));  // 白色主光源
     lights.push_back(Light(Vec3f(-3, 2, 1), Vec3f(0.8, 0.6, 1.0), 5.0f));  // 紫色辅助光源
@@ -453,8 +458,8 @@ void Renderer::setPixel(int x, int y, const Color& color, float depth) {
 }
 
 Vec3f Renderer::calculateLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
-    // 环境光 - 增强强度，让场景更明亮
-    Vec3f ambient = baseColor * (ambientIntensity * 0.6f); // 提高到60%
+    // 环境光 - 使用环境光强度系数
+    Vec3f ambient = baseColor * (ambientIntensity * ambientStrength);
     
     // 初始化总光照贡献
     Vec3f totalLighting = ambient;
@@ -480,24 +485,34 @@ Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, 
     float attenuation = light.intensity / r_squared;
     
     // 漫反射光照（Lambert模型） - 使用本地坐标系的法向量
-    float diffuseStrength = std::max(0.0f, localNormal.dot(lightDir));
-    Vec3f diffuse = baseColor * light.color * diffuseStrength * attenuation;
+    float diffuseIntensity = std::max(0.0f, localNormal.dot(lightDir));
+    Vec3f diffuse = baseColor * light.color * diffuseIntensity * attenuation * this->diffuseStrength;
     
     // 高光计算 - 只有当表面面向光源时才计算
     Vec3f specular(0, 0, 0);
-    if (diffuseStrength > 0.0f) {  // 只有面向光源的表面才有高光
-        // 计算视角方向 - 在本地坐标系中，摄像机位置需要变换
+    if (diffuseIntensity > 0.0f) {  // 只有面向光源的表面才有高光
+        // 正确的视角方向计算：直接将摄像机位置变换到物体本地坐标系
+        // 1. 获取摄像机在世界坐标系的位置
+        Vec3f worldCameraPos = VectorMath::inverse(viewMatrix) * Vec3f(0, 0, 0);
+        
+        // 2. 将摄像机位置变换到物体本地坐标系
         Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
-        Vec3f localCameraPos = invModelMatrix * Vec3f(0, 0, 5);
-        Vec3f viewDir = (localCameraPos - localPos).normalize();
+        Vec3f localCameraPos = invModelMatrix * worldCameraPos;
+        
+        // 3. 在本地坐标系中计算视角方向（从表面点指向摄像机，取相反数修正方向）
+        Vec3f localViewDir = (localPos - localCameraPos).normalize();
         
         // 镜面反射光照（Phong模型）
         Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;
-        float specularStrength = std::pow(std::max(0.0f, viewDir.dot(reflectDir)), 32.0f);
+        reflectDir = reflectDir.normalize();
         
-        // 标准物理高光公式：Ks × (I/r²) × (V·R)^shininess
-        float Ks = 0.5f;  // 镜面反射系数
-        specular = light.color * Ks * attenuation * specularStrength;
+        // 降低高光指数，使高光更容易出现
+        float shininess = 32.0f;  // 从32降低到16
+        float specularIntensity = std::pow(std::max(0.0f, localViewDir.dot(reflectDir)), shininess);
+        
+        // 增加镜面反射系数
+        float Ks = 0.5f;  // 从0.5增加到1.0
+        specular = light.color * Ks * attenuation * specularIntensity * this->specularStrength;
     }
     
     return diffuse + specular;

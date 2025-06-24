@@ -16,12 +16,18 @@ struct Color {
         return Vec3f(r / 255.0f, g / 255.0f, b / 255.0f);
     }
     
-    // 从浮点数创建
+    // 从浮点数创建 - 使用Reinhard色调映射避免颜色截断
     static Color fromVec3f(const Vec3f& v) {
+        // Reinhard色调映射：tone = color / (1 + color)
+        // 这样可以将任意大的值平滑映射到[0,1]范围
+        float mappedR = v.x / (1.0f + v.x);
+        float mappedG = v.y / (1.0f + v.y);
+        float mappedB = v.z / (1.0f + v.z);
+        
         return Color(
-            static_cast<unsigned char>(VectorMath::clamp(v.x, 0.0f, 1.0f) * 255.0f),
-            static_cast<unsigned char>(VectorMath::clamp(v.y, 0.0f, 1.0f) * 255.0f),
-            static_cast<unsigned char>(VectorMath::clamp(v.z, 0.0f, 1.0f) * 255.0f)
+            static_cast<unsigned char>(VectorMath::clamp(mappedR, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(VectorMath::clamp(mappedG, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(VectorMath::clamp(mappedB, 0.0f, 1.0f) * 255.0f)
         );
     }
 };

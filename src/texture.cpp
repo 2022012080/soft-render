@@ -122,42 +122,16 @@ Color Texture::sample(float u, float v) const {
     u = u - std::floor(u);
     v = v - std::floor(v);
     
-    // 转换为像素坐标
-    float x = u * (width - 1);
-    float y = v * (height - 1);
+    // 转换为像素坐标 - 使用最近邻采样
+    int x = static_cast<int>(u * (width - 1) + 0.5f);
+    int y = static_cast<int>(v * (height - 1) + 0.5f);
     
-    // 双线性插值
-    int x0 = static_cast<int>(x);
-    int y0 = static_cast<int>(y);
-    int x1 = std::min(x0 + 1, width - 1);
-    int y1 = std::min(y0 + 1, height - 1);
+    // 确保坐标在有效范围内
+    x = std::max(0, std::min(x, width - 1));
+    y = std::max(0, std::min(y, height - 1));
     
-    float fx = x - x0;
-    float fy = y - y0;
-    
-    Color c00 = getPixel(x0, y0);
-    Color c10 = getPixel(x1, y0);
-    Color c01 = getPixel(x0, y1);
-    Color c11 = getPixel(x1, y1);
-    
-    // 插值
-    Color c0 = Color(
-        static_cast<unsigned char>(c00.r * (1 - fx) + c10.r * fx),
-        static_cast<unsigned char>(c00.g * (1 - fx) + c10.g * fx),
-        static_cast<unsigned char>(c00.b * (1 - fx) + c10.b * fx)
-    );
-    
-    Color c1 = Color(
-        static_cast<unsigned char>(c01.r * (1 - fx) + c11.r * fx),
-        static_cast<unsigned char>(c01.g * (1 - fx) + c11.g * fx),
-        static_cast<unsigned char>(c01.b * (1 - fx) + c11.b * fx)
-    );
-    
-    return Color(
-        static_cast<unsigned char>(c0.r * (1 - fy) + c1.r * fy),
-        static_cast<unsigned char>(c0.g * (1 - fy) + c1.g * fy),
-        static_cast<unsigned char>(c0.b * (1 - fy) + c1.b * fy)
-    );
+    // 直接返回最近的像素，不进行插值
+    return getPixel(x, y);
 }
 
 Vec3f Texture::sampleVec3f(float u, float v) const {

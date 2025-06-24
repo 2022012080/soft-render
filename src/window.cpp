@@ -14,6 +14,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_fov(20.0f)  // 初始FOV为20度
     , m_lightX(3.0f), m_lightY(3.0f), m_lightZ(3.0f), m_lightIntensity(10.0f)
     , m_light2X(-3.0f), m_light2Y(2.0f), m_light2Z(1.0f), m_light2Intensity(5.0f) // 第二个光源
+    , m_diffuseStrength(1.0f), m_specularStrength(1.0f), m_ambientStrength(1.0f) // 光照系数
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
 {
@@ -194,41 +195,60 @@ void RenderWindow::CreateControls() {
     m_light2IntensityEdit = CreateWindowA("EDIT", "5", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1220, 405, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_INTENSITY, GetModuleHandle(nullptr), nullptr);
     
+    // 新增：光照系数控制
+    m_lightingLabel = CreateWindowA("STATIC", "Lighting Coefficients:", WS_VISIBLE | WS_CHILD,
+        1220, 440, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    CreateWindowA("STATIC", "Diffuse:", WS_VISIBLE | WS_CHILD,
+        1220, 465, 60, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_diffuseEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1285, 465, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_DIFFUSE_STRENGTH, GetModuleHandle(nullptr), nullptr);
+    
+    CreateWindowA("STATIC", "Specular:", WS_VISIBLE | WS_CHILD,
+        1355, 465, 60, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_specularEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1420, 465, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SPECULAR_STRENGTH, GetModuleHandle(nullptr), nullptr);
+    
+    CreateWindowA("STATIC", "Ambient:", WS_VISIBLE | WS_CHILD,
+        1220, 495, 60, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_ambientEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1285, 495, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_AMBIENT_STRENGTH, GetModuleHandle(nullptr), nullptr);
+    
     // FOV controls
     CreateWindowA("STATIC", "Field of View (FOV):", WS_VISIBLE | WS_CHILD,
-        1220, 440, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 530, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_fovDecreaseBtn = CreateWindowA("BUTTON", "(-)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 490, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
+        1220, 555, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
     
     m_fovIncreaseBtn = CreateWindowA("BUTTON", "(+)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1310, 490, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
+        1310, 555, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
     
     // 新增：绘制控制按钮
     CreateWindowA("STATIC", "Render Controls:", WS_VISIBLE | WS_CHILD,
-        1220, 540, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 595, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edges: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 570, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
+        1220, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
     
     m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1330, 570, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
+        1330, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
     
     // 新增：SSAA控制
     CreateWindowA("STATIC", "SSAA (Super Sampling):", WS_VISIBLE | WS_CHILD,
-        1220, 610, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 660, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_toggleSSAABtn = CreateWindowA("BUTTON", "SSAA: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 635, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
+        1220, 685, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaScaleDecBtn = CreateWindowA("BUTTON", "Scale -", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1330, 635, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
+        1330, 685, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaScaleIncBtn = CreateWindowA("BUTTON", "Scale +", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1410, 635, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
+        1410, 685, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaStatusLabel = CreateWindowA("STATIC", "SSAA: OFF (1x)", WS_VISIBLE | WS_CHILD,
-        1220, 675, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 725, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
@@ -281,6 +301,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnLightChanged();
             } else if (controlId >= ID_LIGHT2_X && controlId <= ID_LIGHT2_INTENSITY) {
                 OnLight2Changed();
+            } else if (controlId >= ID_DIFFUSE_STRENGTH && controlId <= ID_AMBIENT_STRENGTH) {
+                OnLightingChanged();
             }
         } else if (HIWORD(wParam) == BN_CLICKED) {
             int controlId = LOWORD(wParam);
@@ -405,6 +427,22 @@ void RenderWindow::OnLight2Changed() {
     UpdateRender();
 }
 
+void RenderWindow::OnLightingChanged() {
+    // Get lighting coefficient values from edit controls
+    char buffer[32];
+    
+    GetWindowTextA(m_diffuseEdit, buffer, sizeof(buffer));
+    m_diffuseStrength = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_specularEdit, buffer, sizeof(buffer));
+    m_specularStrength = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_ambientEdit, buffer, sizeof(buffer));
+    m_ambientStrength = static_cast<float>(atof(buffer));
+    
+    UpdateRender();
+}
+
 void RenderWindow::UpdateRender() {
     // Set up matrices - 支持完整的XYZ旋转
     Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(0, 0, -5)) * 
@@ -463,6 +501,11 @@ void RenderWindow::UpdateRender() {
     }
     
     m_renderer->setAmbientIntensity(0.3f);
+    
+    // 设置光照系数
+    m_renderer->setDiffuseStrength(m_diffuseStrength);
+    m_renderer->setSpecularStrength(m_specularStrength);
+    m_renderer->setAmbientStrength(m_ambientStrength);
     
     // Clear and render
     m_renderer->clear(Color(50, 50, 100));
