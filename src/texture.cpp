@@ -48,22 +48,45 @@ void Texture::createDefault(int w, int h) {
 }
 
 bool Texture::parseBMPHeader(std::ifstream& file) {
+    // 重置文件指针到开始
+    file.seekg(0, std::ios::beg);
+    
     // 读取BMP文件头
     char signature[2];
     file.read(signature, 2);
     if (signature[0] != 'B' || signature[1] != 'M') {
+        std::cerr << "不是有效的BMP文件" << std::endl;
         return false;
     }
     
-    // 跳过文件大小等字段
-    file.seekg(18, std::ios::cur);
+    // 跳过文件大小(4字节)，保留字段(4字节)，读取数据偏移(4字节)
+    file.seekg(4, std::ios::cur);  // 文件大小
+    file.seekg(4, std::ios::cur);  // 保留字段
+    
+    uint32_t dataOffset;
+    file.read(reinterpret_cast<char*>(&dataOffset), 4);
+    
+    // 跳过信息头大小(4字节)
+    file.seekg(4, std::ios::cur);
     
     // 读取宽度和高度
     file.read(reinterpret_cast<char*>(&width), 4);
     file.read(reinterpret_cast<char*>(&height), 4);
     
-    // 跳过其他字段到像素数据
-    file.seekg(28, std::ios::cur);
+    // 读取颜色平面数和每像素位数
+    uint16_t planes, bitsPerPixel;
+    file.read(reinterpret_cast<char*>(&planes), 2);
+    file.read(reinterpret_cast<char*>(&bitsPerPixel), 2);
+    
+    if (bitsPerPixel != 24) {
+        std::cerr << "只支持24位BMP文件，当前位深：" << bitsPerPixel << std::endl;
+        return false;
+    }
+    
+    // 跳转到像素数据位置
+    file.seekg(dataOffset, std::ios::beg);
+    
+    std::cout << "BMP文件信息: " << width << "x" << height << ", " << bitsPerPixel << "位" << std::endl;
     
     return true;
 }

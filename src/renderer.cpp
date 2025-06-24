@@ -168,6 +168,11 @@ void Renderer::renderTriangleHighRes(const Vertex& v0, const Vertex& v1, const V
     
     // 渲染到高分辨率缓冲区
     rasterizeTriangleHighRes(sv0, sv1, sv2);
+    
+    // 绘制三角形边线（根据开关决定）- 在SSAA模式下也需要绘制
+    if (m_drawTriangleEdges) {
+        drawTriangleEdgesHighRes(sv0, sv1, sv2);
+    }
 }
 
 void Renderer::rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
@@ -345,13 +350,13 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
 }
 
 Color Renderer::fragmentShader(const ShaderFragment& fragment) {
-    // 强制设置为纯白色，完全忽略纹理
-    Vec3f baseColor(1, 1, 1);  // 纯白色
+    // 设置基础颜色 - 如果有纹理则使用纹理，否则使用白色
+    Vec3f baseColor(1, 1, 1);  // 默认白色
     
-    // 完全禁用纹理采样，确保球体显示为纯白色
-    // if (currentTexture && currentTexture->isValid()) {
-    //     baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
-    // }
+    // 启用纹理采样
+    if (currentTexture && currentTexture->isValid()) {
+        baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
+    }
     
     Vec3f finalColor = calculateLighting(fragment.localPos, fragment.localNormal, baseColor);
     
@@ -674,6 +679,94 @@ void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color
     }
 }
 
+// 绘制线段到高分辨率缓冲区 - 用于SSAA模式
+void Renderer::drawLineHighRes(const Vec3f& start, const Vec3f& end, const Color& color, float width) {
+    // 将3D点转换到屏幕坐标（使用高分辨率视口矩阵）
+    Vec3f worldStart = modelMatrix * start;
+    Vec3f worldEnd = modelMatrix * end;
+    Vec3f viewStart = viewMatrix * worldStart;
+    Vec3f viewEnd = viewMatrix * worldEnd;
+    Vec3f clipStart = projectionMatrix * viewStart;
+    Vec3f clipEnd = projectionMatrix * viewEnd;
+    
+    // 使用高分辨率视口矩阵进行变换
+    Matrix4x4 highResViewport = createHighResViewportMatrix();
+    Vec3f screenStart = highResViewport * clipStart;
+    Vec3f screenEnd = highResViewport * clipEnd;
+    
+    int x0 = static_cast<int>(screenStart.x);
+    int y0 = static_cast<int>(screenStart.y);
+    int x1 = static_cast<int>(screenEnd.x);
+    int y1 = static_cast<int>(screenEnd.y);
+    float z0 = screenStart.z;
+    float z1 = screenEnd.z;
+    
+    // 改进的Bresenham直线算法
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+    
+    int x = x0, y = y0;
+    float totalDistance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+    
+    // 确保线宽至少为1
+    int lineWidth = std::max(1, static_cast<int>(width));
+    int halfWidth = lineWidth / 2;
+    
+    while (true) {
+        // 计算当前点的深度值
+        float currentDistance = std::sqrt(static_cast<float>((x - x0) * (x - x0) + (y - y0) * (y - y0)));
+        float t = (totalDistance > 0) ? (currentDistance / totalDistance) : 0;
+        float z = VectorMath::lerp(z0, z1, t);
+        
+        // 绘制像素（考虑线宽）- 使用圆形笔刷
+        for (int dx_offset = -halfWidth; dx_offset <= halfWidth; dx_offset++) {
+            for (int dy_offset = -halfWidth; dy_offset <= halfWidth; dy_offset++) {
+                // 使用圆形笔刷，避免方形笔刷的锯齿
+                float distance = std::sqrt(static_cast<float>(dx_offset * dx_offset + dy_offset * dy_offset));
+                if (distance <= halfWidth) {
+                    int px = x + dx_offset;
+                    int py = y + dy_offset;
+                    if (px >= 0 && px < m_highResWidth && py >= 0 && py < m_highResHeight) {
+                        if (depthTestHighRes(px, py, z)) {
+                            // 如果颜色有alpha通道，进行alpha混合
+                            if (color.a < 255) {
+                                int index = py * m_highResWidth + px;
+                                Color existingColor = m_highResFrameBuffer[index].color;
+                                
+                                float alpha = color.a / 255.0f;
+                                Color blendedColor(
+                                    static_cast<unsigned char>(color.r * alpha + existingColor.r * (1.0f - alpha)),
+                                    static_cast<unsigned char>(color.g * alpha + existingColor.g * (1.0f - alpha)),
+                                    static_cast<unsigned char>(color.b * alpha + existingColor.b * (1.0f - alpha)),
+                                    255
+                                );
+                                setPixelHighRes(px, py, blendedColor, z);
+                            } else {
+                                setPixelHighRes(px, py, color, z);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (x == x1 && y == y1) break;
+        
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
 // 绘制坐标轴
 void Renderer::drawAxes(float length) {
     Vec3f origin(0, 0, 0);
@@ -869,9 +962,16 @@ void Renderer::drawLightRays(const Model& model) {
 
 void Renderer::drawTriangleEdges(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
     // 绘制三角形边线 - 使用本地坐标，增加线宽防止断线
-    drawLine(v0.localPos, v1.localPos, Color(0, 0, 0), 2.0f);  // 黑色边线，宽度3像素
+    drawLine(v0.localPos, v1.localPos, Color(0, 0, 0), 2.0f);  // 黑色边线，宽度2像素
     drawLine(v1.localPos, v2.localPos, Color(0, 0, 0), 2.0f);
     drawLine(v2.localPos, v0.localPos, Color(0, 0, 0), 2.0f);
+}
+
+void Renderer::drawTriangleEdgesHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2) {
+    // 在SSAA模式下绘制三角形边线到高分辨率缓冲区
+    drawLineHighRes(v0.localPos, v1.localPos, Color(0, 0, 0), 2.0f * m_ssaaScale);  // 按比例调整线宽
+    drawLineHighRes(v1.localPos, v2.localPos, Color(0, 0, 0), 2.0f * m_ssaaScale);
+    drawLineHighRes(v2.localPos, v0.localPos, Color(0, 0, 0), 2.0f * m_ssaaScale);
 }
 
 // 新增：光源管理方法实现

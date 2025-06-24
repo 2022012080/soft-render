@@ -118,6 +118,7 @@ public:
     
     // 新增：绘制线段
     void drawLine(const Vec3f& start, const Vec3f& end, const Color& color, float width = 1.0f);
+    void drawLineHighRes(const Vec3f& start, const Vec3f& end, const Color& color, float width = 1.0f);
     
     // 新增：绘制坐标轴
     void drawAxes(float length = 2.0f);
@@ -178,6 +179,7 @@ private:
     
     // 绘制三角形边线
     void drawTriangleEdges(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2);
+    void drawTriangleEdgesHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2);
     
     // 绘制扫描线
     void drawScanline(int y, int x1, int x2, const ShaderFragment& f1, const ShaderFragment& f2);

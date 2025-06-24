@@ -69,7 +69,23 @@ bool RenderWindow::Initialize() {
         m_model->scaleModel(0.5f);
     }
     
-    m_texture->createDefault(256, 256);
+    // 尝试加载BMP纹理文件，如果失败则创建默认纹理
+    if (!m_texture->loadFromFile("assets/texture.bmp")) {
+        std::cout << "未找到 assets/texture.bmp，尝试加载其他纹理文件..." << std::endl;
+        
+        // 尝试其他常见的纹理文件名
+        if (!m_texture->loadFromFile("assets/cube_texture.bmp") &&
+            !m_texture->loadFromFile("assets/diffuse.bmp") &&
+            !m_texture->loadFromFile("texture.bmp")) {
+            std::cout << "未找到纹理文件，使用默认纹理" << std::endl;
+            m_texture->createDefault(256, 256);
+        } else {
+            std::cout << "成功加载纹理文件" << std::endl;
+        }
+    } else {
+        std::cout << "成功加载 assets/texture.bmp" << std::endl;
+    }
+    
     m_renderer->setTexture(m_texture);
     
     // Create DIB for rendering
@@ -452,7 +468,13 @@ void RenderWindow::UpdateRender() {
     m_renderer->clear(Color(50, 50, 100));
     m_renderer->clearDepth();
     
-    // 先绘制坐标轴和网格
+    if (m_model->getFaceCount() > 0) {
+        // 渲染模型（包括三角形和边界线）
+        m_renderer->renderModel(*m_model);
+    }
+    
+    // 在模型渲染后绘制坐标轴、网格、光源位置和光线
+    // 这样它们不会被SSAA的下采样过程覆盖
     m_renderer->drawGrid(5.0f, 5);   // 5单位大小，5个分割（每1单位一条线）
     m_renderer->drawAxes(2.0f);      // 2单位长度的坐标轴
     m_renderer->drawAllLightPositions(); // 绘制所有光源位置
@@ -462,7 +484,6 @@ void RenderWindow::UpdateRender() {
         if (m_renderer->getDrawLightRays()) {
             m_renderer->drawLightRays(*m_model); // 绘制光线到顶点
         }
-        m_renderer->renderModel(*m_model);
     }
     
     RenderToWindow();
