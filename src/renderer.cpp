@@ -15,12 +15,11 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     m_highResHeight = 0;
     
     // 初始化多光源系统
-    ambientIntensity = 0.2f;
-    
-    // 初始化光照系数
+    ambientIntensity = 0.2f;    // 环境光强度
     diffuseStrength = 1.0f;     // 漫反射强度
     specularStrength = 1.0f;    // 高光强度
     ambientStrength = 1.0f;     // 环境光强度
+    shininess = 32.0f;          // 新增：高光指数初始化
     
     // 添加默认光源
     lights.push_back(Light(Vec3f(3, 3, 3), Vec3f(1, 1, 1), 10.0f));  // 白色主光源
@@ -29,6 +28,7 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 初始化绘制控制开关
     m_drawTriangleEdges = false;  // 默认关闭三角形描边
     m_drawLightRays = false;      // 默认关闭光线
+    m_drawAxesAndGrid = true;     // 默认开启坐标轴和网格线
     
     // 初始化纹理启用控制
     m_enableTexture = false;      // 默认关闭贴图
@@ -509,9 +509,8 @@ Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, 
         Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;
         reflectDir = reflectDir.normalize();
         
-        // 降低高光指数，使高光更容易出现
-        float shininess = 32.0f;  // 从32降低到16
-        float specularIntensity = std::pow(std::max(0.0f, localViewDir.dot(reflectDir)), shininess);
+        // 使用可调节的高光指数
+        float specularIntensity = std::pow(std::max(0.0f, localViewDir.dot(reflectDir)), this->shininess);
         
         // 增加镜面反射系数
         float Ks = 0.5f;  // 从0.5增加到1.0

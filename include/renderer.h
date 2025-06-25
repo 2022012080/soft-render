@@ -58,10 +58,12 @@ private:
     float diffuseStrength;    // 漫反射强度系数
     float specularStrength;   // 高光强度系数
     float ambientStrength;    // 环境光强度系数
+    float shininess;          // 新增：高光指数（控制高光集中程度）
     
     // 新增：绘制控制开关
     bool m_drawTriangleEdges;
     bool m_drawLightRays;
+    bool m_drawAxesAndGrid;  // 新增：坐标轴和网格线控制
     
     // 新增：纹理启用控制
     bool m_enableTexture;
@@ -105,15 +107,19 @@ public:
     void setDiffuseStrength(float strength) { diffuseStrength = strength; }
     void setSpecularStrength(float strength) { specularStrength = strength; }
     void setAmbientStrength(float strength) { ambientStrength = strength; }
+    void setShininess(float value) { shininess = value; }  // 新增：设置高光指数
     float getDiffuseStrength() const { return diffuseStrength; }
     float getSpecularStrength() const { return specularStrength; }
     float getAmbientStrength() const { return ambientStrength; }
+    float getShininess() const { return shininess; }  // 新增：获取高光指数
     
     // 新增：设置绘制控制开关
     void setDrawTriangleEdges(bool draw) { m_drawTriangleEdges = draw; }
     void setDrawLightRays(bool draw) { m_drawLightRays = draw; }
+    void setDrawAxesAndGrid(bool draw) { m_drawAxesAndGrid = draw; }
     bool getDrawTriangleEdges() const { return m_drawTriangleEdges; }
     bool getDrawLightRays() const { return m_drawLightRays; }
+    bool getDrawAxesAndGrid() const { return m_drawAxesAndGrid; }
     
     // 新增：纹理启用控制方法
     void setTextureEnabled(bool enabled) { m_enableTexture = enabled; }

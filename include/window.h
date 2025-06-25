@@ -27,6 +27,9 @@ public:
     // 新增：纹理控制方法
     void OnToggleTexture();
     
+    // 新增：坐标轴和网格线控制方法
+    void OnToggleAxesGrid();
+    
     // 新增：SSAA控制方法
     void OnToggleSSAA();
     void OnSSAAScaleIncrease();
@@ -61,6 +64,9 @@ private:
     HWND m_diffuseEdit, m_specularEdit, m_ambientEdit;
     HWND m_lightingLabel;
     
+    // 新增：高光指数控件
+    HWND m_shininessEdit;
+    
     // 新增：FOV控制按钮
     HWND m_fovIncreaseBtn, m_fovDecreaseBtn;
     
@@ -69,6 +75,9 @@ private:
     
     // 新增：纹理控制按钮
     HWND m_toggleTextureBtn;
+    
+    // 新增：坐标轴和网格线控制按钮
+    HWND m_toggleAxesGridBtn;
     
     // 新增：SSAA控制按钮和标签
     HWND m_toggleSSAABtn, m_ssaaScaleIncBtn, m_ssaaScaleDecBtn;
@@ -99,6 +108,9 @@ private:
     
     // 新增：光照系数设置
     float m_diffuseStrength, m_specularStrength, m_ambientStrength;
+    
+    // 新增：高光指数设置
+    float m_shininess;
     
     // DIB for displaying
     HBITMAP m_bitmap;
@@ -131,6 +143,9 @@ private:
     // 新增：纹理控制ID
     static const int ID_TOGGLE_TEXTURE = 1029;
     
+    // 新增：坐标轴和网格线控制ID
+    static const int ID_TOGGLE_AXES_GRID = 1030;
+    
     // 新增：SSAA控制ID
     static const int ID_TOGGLE_SSAA = 1019;
     static const int ID_SSAA_SCALE_INC = 1020;
@@ -146,4 +161,7 @@ private:
     static const int ID_DIFFUSE_STRENGTH = 1026;
     static const int ID_SPECULAR_STRENGTH = 1027;
     static const int ID_AMBIENT_STRENGTH = 1028;
+    
+    // 新增：高光指数控制ID
+    static const int ID_SHININESS = 1031;
 }; 

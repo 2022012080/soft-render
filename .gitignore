@@ -1,15 +1,14 @@
 # 忽略构建文件夹
 build/
-
+test/
 # 忽略Visual Studio文件夹
 .vs/
-
+examples/
 # 忽略输出文件夹
 out/
 
 # 忽略编译生成的文件
 *.exe
-*.obj
 *.pdb
 *.dll
 *.lib
