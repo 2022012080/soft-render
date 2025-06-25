@@ -106,9 +106,9 @@ def main():
     
     # Generate the sphere data
     vertices, texture_coords, normals, faces = generate_high_res_sphere(
-        radius=2.0,
-        longitude_divisions=64,  # 16 * 4 = 64
-        latitude_divisions=32    # 8 * 4 = 32
+        radius=2,
+        longitude_divisions=256,  # 16 * 4 = 64
+        latitude_divisions=128    # 8 * 4 = 32
     )
     
     # Write to file

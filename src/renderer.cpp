@@ -380,6 +380,11 @@ void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1,
     float x2 = v2.position.x;
     float y2 = v2.position.y;
     
+    float area = 0.5f * std::abs((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0));
+    if (area < 0.5f) {  // 跳过面积过小的三角形
+        return;
+    }
+    
     // 计算边界框（使用浮点数）
     int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
     int maxX = std::min(width - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
