@@ -35,6 +35,9 @@ public:
     void OnSSAAScaleIncrease();
     void OnSSAAScaleDecrease();
     
+    // 新增：模型加载方法
+    void OnLoadModel();
+    
     void OnCameraChanged();
     void OnObjectChanged(); // 新增：物体坐标变化处理
     void OnRotationChanged();
@@ -83,6 +86,10 @@ private:
     HWND m_toggleSSAABtn, m_ssaaScaleIncBtn, m_ssaaScaleDecBtn;
     HWND m_ssaaStatusLabel;
     
+    // 新增：模型文件输入控件
+    HWND m_modelFileEdit, m_loadModelBtn;
+    HWND m_modelStatusLabel;
+    
     // Rendering
     std::unique_ptr<Renderer> m_renderer;
     std::unique_ptr<Model> m_model;
@@ -111,6 +118,9 @@ private:
     
     // 新增：高光指数设置
     float m_shininess;
+    
+    // 新增：当前模型文件名
+    std::string m_currentModelFile;
     
     // DIB for displaying
     HBITMAP m_bitmap;
@@ -164,4 +174,8 @@ private:
     
     // 新增：高光指数控制ID
     static const int ID_SHININESS = 1031;
+    
+    // 新增：模型文件控制ID
+    static const int ID_MODEL_FILE = 1032;
+    static const int ID_LOAD_MODEL = 1033;
 }; 

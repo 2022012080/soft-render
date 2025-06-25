@@ -97,7 +97,7 @@ def write_obj_file(filename, vertices, texture_coords, normals, faces):
         f.write("\n# Faces (faces)\n")
         for face in faces:
             # face format: (v1, vt1, vn1, v2, vt2, vn2, v3, vt3, vn3)
-            f.write(f"f {face[0]}/{face[1]}/{face[2]} {face[3]}/{face[4]}/{face[5]} {face[6]}/{face[7]}/{face[8]}\n")
+            f.write(f"f {face[0]}/{face[1]}/{face[2]} {face[6]}/{face[7]}/{face[8]} {face[3]}/{face[4]}/{face[5]}\n")
 
 def main():
     print("Generating high-resolution sphere...")
@@ -107,12 +107,12 @@ def main():
     # Generate the sphere data
     vertices, texture_coords, normals, faces = generate_high_res_sphere(
         radius=2.0,
-        longitude_divisions=256,  # 16 * 4 = 64
-        latitude_divisions=128    # 8 * 4 = 32
+        longitude_divisions=64,  # 16 * 4 = 64
+        latitude_divisions=32    # 8 * 4 = 32
     )
     
     # Write to file
-    output_file = "assets/cube.obj"
+    output_file = "assets/sphere.obj"
     write_obj_file(output_file, vertices, texture_coords, normals, faces)
     
     print(f"Generated {len(vertices)} vertices")

@@ -502,8 +502,8 @@ Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, 
         Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
         Vec3f localCameraPos = invModelMatrix * worldCameraPos;
         
-        // 3. 在本地坐标系中计算视角方向（从表面点指向摄像机，取相反数修正方向）
-        Vec3f localViewDir = (localPos - localCameraPos).normalize();
+        // 3. 在本地坐标系中计算视角方向（从表面点指向摄像机）
+        Vec3f localViewDir = (localCameraPos - localPos).normalize();
         
         // 镜面反射光照（Phong模型）
         Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;

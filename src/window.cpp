@@ -18,6 +18,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_shininess(32.0f) // 新增：高光指数初始化
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
+    , m_currentModelFile("cube7.obj") // 默认模型文件
 {
     m_renderer = std::make_unique<Renderer>(m_renderWidth, m_renderHeight);
     m_model = std::make_unique<Model>();
@@ -66,9 +67,13 @@ bool RenderWindow::Initialize() {
     CreateControls();
     
     // Load model and texture
-    if (m_model->loadFromFile("assets/cube.obj")) {
+    std::string modelPath = "assets/" + m_currentModelFile;
+    if (m_model->loadFromFile(modelPath)) {
         m_model->centerModel();
         m_model->scaleModel(0.5f);
+        std::cout << "成功加载模型: " << modelPath << std::endl;
+    } else {
+        std::cout << "加载模型失败: " << modelPath << std::endl;
     }
     
     // 尝试加载BMP纹理文件，如果失败则创建默认纹理
@@ -265,6 +270,19 @@ void RenderWindow::CreateControls() {
     m_ssaaStatusLabel = CreateWindowA("STATIC", "SSAA: OFF (1x)", WS_VISIBLE | WS_CHILD,
         1220, 760, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
+    // 新增：模型文件输入控件
+    CreateWindowA("STATIC", "Model File (in assets/):", WS_VISIBLE | WS_CHILD,
+        1220, 790, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_modelFileEdit = CreateWindowA("EDIT", "cube7.obj", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1220, 815, 150, 25, m_hwnd, (HMENU)(LONG_PTR)ID_MODEL_FILE, GetModuleHandle(nullptr), nullptr);
+    
+    m_loadModelBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1380, 815, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_MODEL, GetModuleHandle(nullptr), nullptr);
+    
+    m_modelStatusLabel = CreateWindowA("STATIC", "Model: cube7.obj", WS_VISIBLE | WS_CHILD,
+        1220, 845, 300, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
         10, 10, m_renderWidth, m_renderHeight, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
@@ -341,6 +359,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnSSAAScaleIncrease();
             } else if (controlId == ID_SSAA_SCALE_DEC) {
                 OnSSAAScaleDecrease();
+            } else if (controlId == ID_LOAD_MODEL) {
+                OnLoadModel();
             }
         }
         return 0;
@@ -746,4 +766,47 @@ void RenderWindow::UpdateSSAAControls() {
     // 更新按钮状态
     EnableWindow(m_ssaaScaleIncBtn, scale < 8);
     EnableWindow(m_ssaaScaleDecBtn, scale > 2);
+}
+
+void RenderWindow::OnLoadModel() {
+    // 获取输入框中的文件名
+    char buffer[256];
+    GetWindowTextA(m_modelFileEdit, buffer, sizeof(buffer));
+    
+    if (strlen(buffer) == 0) {
+        SetWindowTextA(m_modelStatusLabel, "错误: 请输入文件名");
+        return;
+    }
+    
+    std::string filename = buffer;
+    std::string modelPath = "assets/" + filename;
+    
+    // 创建新的模型对象
+    auto newModel = std::make_unique<Model>();
+    
+    if (newModel->loadFromFile(modelPath)) {
+        // 加载成功，替换当前模型
+        newModel->centerModel();
+        newModel->scaleModel(0.5f);
+        
+        m_model = std::move(newModel);
+        m_currentModelFile = filename;
+        
+        // 更新状态标签
+        std::string statusText = "模型: " + filename + " (加载成功)";
+        SetWindowTextA(m_modelStatusLabel, statusText.c_str());
+        
+        std::cout << "成功加载模型: " << modelPath << std::endl;
+        std::cout << "模型包含 " << m_model->getFaceCount() << " 个面" << std::endl;
+        
+        // 重新渲染
+        UpdateRender();
+    } else {
+        // 加载失败
+        std::string statusText = "错误: 无法加载 " + filename;
+        SetWindowTextA(m_modelStatusLabel, statusText.c_str());
+        
+        std::cout << "加载模型失败: " << modelPath << std::endl;
+        std::cout << "请确认文件存在于assets文件夹中" << std::endl;
+    }
 } 
