@@ -141,196 +141,196 @@ bool RenderWindow::Initialize() {
 }
 
 void RenderWindow::CreateControls() {
-    // Object position controls - 物体坐标控制
-    CreateWindowA("STATIC", "Object Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        1220, 20, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Object position controls
+    CreateWindowA("STATIC", "Obj Pos (X,Y,Z):", WS_VISIBLE | WS_CHILD,
+        1220, 10, 120, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_objectXEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_X, GetModuleHandle(nullptr), nullptr);
+        1220, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_X, GetModuleHandle(nullptr), nullptr);
     
     m_objectYEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1290, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Y, GetModuleHandle(nullptr), nullptr);
+        1270, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Y, GetModuleHandle(nullptr), nullptr);
     
     m_objectZEdit = CreateWindowA("EDIT", "-5.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1360, 45, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Z, GetModuleHandle(nullptr), nullptr);
+        1320, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Z, GetModuleHandle(nullptr), nullptr);
     
-    // Rotation controls - 增加间距
-    CreateWindowA("STATIC", "Model Rotation (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
-        1220, 80, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Rotation controls
+    CreateWindowA("STATIC", "Rotation (X,Y,Z):", WS_VISIBLE | WS_CHILD,
+        1220, 50, 120, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_rotationXEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_X, GetModuleHandle(nullptr), nullptr);
+        1220, 65, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_X, GetModuleHandle(nullptr), nullptr);
     
     m_rotationYEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1290, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
+        1270, 65, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Y, GetModuleHandle(nullptr), nullptr);
     
     m_rotationZEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1360, 105, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Z, GetModuleHandle(nullptr), nullptr);
+        1320, 65, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_ROTATION_Z, GetModuleHandle(nullptr), nullptr);
     
-    // Camera roll control - XYZ三个轴的旋转
-    CreateWindowA("STATIC", "Camera Roll (X, Y, Z degrees):", WS_VISIBLE | WS_CHILD,
-        1220, 140, 250, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Camera roll control
+    CreateWindowA("STATIC", "Camera (X,Y,Z):", WS_VISIBLE | WS_CHILD,
+        1220, 90, 120, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_cameraRollXEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_X, GetModuleHandle(nullptr), nullptr);
+        1220, 105, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_X, GetModuleHandle(nullptr), nullptr);
     
     m_cameraRollYEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1290, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Y, GetModuleHandle(nullptr), nullptr);
+        1270, 105, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Y, GetModuleHandle(nullptr), nullptr);
     
     m_cameraRollZEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1360, 165, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Z, GetModuleHandle(nullptr), nullptr);
+        1320, 105, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_CAMERA_ROLL_Z, GetModuleHandle(nullptr), nullptr);
     
-    // Light controls - 增加间距
-    CreateWindowA("STATIC", "Light Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        1220, 200, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Light controls
+    CreateWindowA("STATIC", "Light1 (X,Y,Z):", WS_VISIBLE | WS_CHILD,
+        1220, 130, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_lightXEdit = CreateWindowA("EDIT", "3.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
+        1220, 145, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_X, GetModuleHandle(nullptr), nullptr);
     
     m_lightYEdit = CreateWindowA("EDIT", "-2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1290, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
+        1270, 145, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Y, GetModuleHandle(nullptr), nullptr);
     
     m_lightZEdit = CreateWindowA("EDIT", "3.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1360, 225, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
+        1320, 145, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_Z, GetModuleHandle(nullptr), nullptr);
     
     // Light intensity control
-    CreateWindowA("STATIC", "Light Intensity:", WS_VISIBLE | WS_CHILD,
-        1220, 260, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    CreateWindowA("STATIC", "Intensity:", WS_VISIBLE | WS_CHILD,
+        1370, 130, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_lightIntensityEdit = CreateWindowA("EDIT", "30.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 285, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
+        1370, 145, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：第二个光源控制
-    m_light2Label = CreateWindowA("STATIC", "Light 2 Position (X, Y, Z):", WS_VISIBLE | WS_CHILD,
-        1220, 320, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Light 2 controls
+    m_light2Label = CreateWindowA("STATIC", "Light2 (X,Y,Z):", WS_VISIBLE | WS_CHILD,
+        1220, 170, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_light2XEdit = CreateWindowA("EDIT", "-3.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 345, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_X, GetModuleHandle(nullptr), nullptr);
+        1220, 185, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_X, GetModuleHandle(nullptr), nullptr);
     
     m_light2YEdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1290, 345, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_Y, GetModuleHandle(nullptr), nullptr);
+        1270, 185, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_Y, GetModuleHandle(nullptr), nullptr);
     
     m_light2ZEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1360, 345, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_Z, GetModuleHandle(nullptr), nullptr);
+        1320, 185, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_Z, GetModuleHandle(nullptr), nullptr);
     
     // Light 2 intensity control
-    CreateWindowA("STATIC", "Light 2 Intensity:", WS_VISIBLE | WS_CHILD,
-        1220, 380, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    CreateWindowA("STATIC", "Intensity:", WS_VISIBLE | WS_CHILD,
+        1370, 170, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_light2IntensityEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 405, 80, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_INTENSITY, GetModuleHandle(nullptr), nullptr);
+        1370, 185, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_INTENSITY, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：光照系数控制
-    m_lightingLabel = CreateWindowA("STATIC", "Lighting Coefficients:", WS_VISIBLE | WS_CHILD,
-        1220, 440, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Lighting coefficients
+    m_lightingLabel = CreateWindowA("STATIC", "Lighting:", WS_VISIBLE | WS_CHILD,
+        1220, 210, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    CreateWindowA("STATIC", "Diffuse:", WS_VISIBLE | WS_CHILD,
-        1220, 465, 60, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    CreateWindowA("STATIC", "Diff:", WS_VISIBLE | WS_CHILD,
+        1220, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_diffuseEdit = CreateWindowA("EDIT", "0.2", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1285, 465, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_DIFFUSE_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        1220, 240, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIFFUSE_STRENGTH, GetModuleHandle(nullptr), nullptr);
     
-    CreateWindowA("STATIC", "Specular:", WS_VISIBLE | WS_CHILD,
-        1355, 465, 60, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    CreateWindowA("STATIC", "Spec:", WS_VISIBLE | WS_CHILD,
+        1270, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_specularEdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1420, 465, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SPECULAR_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        1270, 240, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_SPECULAR_STRENGTH, GetModuleHandle(nullptr), nullptr);
     
-    CreateWindowA("STATIC", "Ambient:", WS_VISIBLE | WS_CHILD,
-        1220, 495, 60, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    CreateWindowA("STATIC", "Amb:", WS_VISIBLE | WS_CHILD,
+        1320, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_ambientEdit = CreateWindowA("EDIT", "0.15", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1285, 495, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_AMBIENT_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        1320, 240, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_AMBIENT_STRENGTH, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：高光指数控件
-    CreateWindowA("STATIC", "Shininess:", WS_VISIBLE | WS_CHILD,
-        1355, 495, 70, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Shininess control
+    CreateWindowA("STATIC", "Shin:", WS_VISIBLE | WS_CHILD,
+        1370, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_shininessEdit = CreateWindowA("EDIT", "128.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1430, 495, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SHININESS, GetModuleHandle(nullptr), nullptr);
+        1370, 240, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_SHININESS, GetModuleHandle(nullptr), nullptr);
     
     // FOV controls
-    CreateWindowA("STATIC", "Field of View (FOV):", WS_VISIBLE | WS_CHILD,
-        1220, 530, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    CreateWindowA("STATIC", "FOV:", WS_VISIBLE | WS_CHILD,
+        1220, 265, 30, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_fovDecreaseBtn = CreateWindowA("BUTTON", "(-)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 555, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
+        1220, 280, 30, 25, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
     
     m_fovIncreaseBtn = CreateWindowA("BUTTON", "(+)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1310, 555, 80, 30, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
+        1255, 280, 30, 25, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：绘制控制按钮
-    CreateWindowA("STATIC", "Render Controls:", WS_VISIBLE | WS_CHILD,
-        1220, 595, 150, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Render controls
+    CreateWindowA("STATIC", "Render:", WS_VISIBLE | WS_CHILD,
+        1220, 310, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edges: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
+    m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edge", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1220, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
     
-    m_toggleRaysBtn = CreateWindowA("BUTTON", "Rays: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1330, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
+    m_toggleRaysBtn = CreateWindowA("BUTTON", "Ray", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1265, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：纹理控制按钮
-    m_toggleTextureBtn = CreateWindowA("BUTTON", "Texture: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1440, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_TEXTURE, GetModuleHandle(nullptr), nullptr);
+    // Texture controls
+    m_toggleTextureBtn = CreateWindowA("BUTTON", "Tex", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1310, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_TEXTURE, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：法线贴图控制按钮
-    m_toggleNormalMapBtn = CreateWindowA("BUTTON", "Normal: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1550, 620, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
+    // Normal map control
+    m_toggleNormalMapBtn = CreateWindowA("BUTTON", "Norm", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1355, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：坐标轴和网格线控制按钮
-    m_toggleAxesGridBtn = CreateWindowA("BUTTON", "Axes/Grid: ON", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 655, 120, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_AXES_GRID, GetModuleHandle(nullptr), nullptr);
+    // Axes/Grid control
+    m_toggleAxesGridBtn = CreateWindowA("BUTTON", "Grid", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1400, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_AXES_GRID, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：SSAA控制
-    CreateWindowA("STATIC", "SSAA (Super Sampling):", WS_VISIBLE | WS_CHILD,
-        1220, 695, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // SSAA controls
+    CreateWindowA("STATIC", "SSAA:", WS_VISIBLE | WS_CHILD,
+        1220, 355, 40, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_toggleSSAABtn = CreateWindowA("BUTTON", "SSAA: OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 720, 100, 30, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
+    m_toggleSSAABtn = CreateWindowA("BUTTON", "OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1220, 370, 35, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
     
-    m_ssaaScaleDecBtn = CreateWindowA("BUTTON", "Scale -", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1330, 720, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
+    m_ssaaScaleDecBtn = CreateWindowA("BUTTON", "-", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1260, 370, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
     
-    m_ssaaScaleIncBtn = CreateWindowA("BUTTON", "Scale +", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1410, 720, 70, 30, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
+    m_ssaaScaleIncBtn = CreateWindowA("BUTTON", "+", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1290, 370, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
     
-    m_ssaaStatusLabel = CreateWindowA("STATIC", "SSAA: OFF (1x)", WS_VISIBLE | WS_CHILD,
-        1220, 760, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_ssaaStatusLabel = CreateWindowA("STATIC", "OFF", WS_VISIBLE | WS_CHILD,
+        1320, 355, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：模型文件输入控件
-    CreateWindowA("STATIC", "Model File (in assets/):", WS_VISIBLE | WS_CHILD,
-        1220, 790, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Model file controls
+    CreateWindowA("STATIC", "Model:", WS_VISIBLE | WS_CHILD,
+        1220, 400, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_modelFileEdit = CreateWindowA("EDIT", "sphere.obj", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 815, 150, 25, m_hwnd, (HMENU)(LONG_PTR)ID_MODEL_FILE, GetModuleHandle(nullptr), nullptr);
+        1220, 415, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_MODEL_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadModelBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1380, 815, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_MODEL, GetModuleHandle(nullptr), nullptr);
+        1345, 415, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_MODEL, GetModuleHandle(nullptr), nullptr);
     
-    m_modelStatusLabel = CreateWindowA("STATIC", "Model: sphere.obj", WS_VISIBLE | WS_CHILD,
-        1220, 845, 300, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_modelStatusLabel = CreateWindowA("STATIC", "sphere.obj", WS_VISIBLE | WS_CHILD,
+        1390, 415, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：纹理贴图输入控件
-    CreateWindowA("STATIC", "Texture File (in assets/):", WS_VISIBLE | WS_CHILD,
-        1220, 875, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Texture file controls
+    CreateWindowA("STATIC", "Texture:", WS_VISIBLE | WS_CHILD,
+        1220, 440, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_textureFileEdit = CreateWindowA("EDIT", "texture.bmp", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 900, 150, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TEXTURE_FILE, GetModuleHandle(nullptr), nullptr);
+        1220, 455, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_TEXTURE_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadTextureBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1380, 900, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_TEXTURE, GetModuleHandle(nullptr), nullptr);
+        1345, 455, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_TEXTURE, GetModuleHandle(nullptr), nullptr);
     
-    m_textureStatusLabel = CreateWindowA("STATIC", "Texture: texture.bmp", WS_VISIBLE | WS_CHILD,
-        1220, 930, 300, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_textureStatusLabel = CreateWindowA("STATIC", "texture.bmp", WS_VISIBLE | WS_CHILD,
+        1390, 455, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    // 新增：法线贴图输入控件
-    CreateWindowA("STATIC", "Normal Map File (in assets/):", WS_VISIBLE | WS_CHILD,
-        1220, 960, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // Normal map file controls
+    CreateWindowA("STATIC", "Normal:", WS_VISIBLE | WS_CHILD,
+        1220, 480, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_normalMapFileEdit = CreateWindowA("EDIT", "normal.bmp", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 985, 150, 25, m_hwnd, (HMENU)(LONG_PTR)ID_NORMAL_MAP_FILE, GetModuleHandle(nullptr), nullptr);
+        1220, 495, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_NORMAL_MAP_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadNormalMapBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1380, 985, 60, 25, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
+        1345, 495, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
     
-    m_normalMapStatusLabel = CreateWindowA("STATIC", "Normal Map: normal.bmp", WS_VISIBLE | WS_CHILD,
-        1220, 1015, 300, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_normalMapStatusLabel = CreateWindowA("STATIC", "normal.bmp", WS_VISIBLE | WS_CHILD,
+        1390, 495, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
@@ -707,7 +707,7 @@ void RenderWindow::OnToggleEdges() {
     m_renderer->setDrawTriangleEdges(!currentState);
     
     // 更新按钮文本
-    const char* newText = (!currentState) ? "Edges: ON" : "Edges: OFF";
+    const char* newText = (!currentState) ? "Edge" : "Edge";
     SetWindowTextA(m_toggleEdgesBtn, newText);
     
     UpdateRender();
@@ -718,7 +718,7 @@ void RenderWindow::OnToggleRays() {
     m_renderer->setDrawLightRays(!currentState);
     
     // 更新按钮文本
-    const char* newText = (!currentState) ? "Rays: ON" : "Rays: OFF";
+    const char* newText = (!currentState) ? "Ray" : "Ray";
     SetWindowTextA(m_toggleRaysBtn, newText);
     
     UpdateRender();
@@ -729,7 +729,7 @@ void RenderWindow::OnToggleTexture() {
     m_renderer->setTextureEnabled(!currentState);
     
     // 更新按钮文本
-    const char* newText = (!currentState) ? "Texture: ON" : "Texture: OFF";
+    const char* newText = (!currentState) ? "Tex" : "Tex";
     SetWindowTextA(m_toggleTextureBtn, newText);
     
     UpdateRender();
@@ -740,7 +740,7 @@ void RenderWindow::OnToggleNormalMap() {
     m_renderer->setNormalMapEnabled(!currentState);
     
     // 更新按钮文本
-    const char* newText = (!currentState) ? "Normal: ON" : "Normal: OFF";
+    const char* newText = (!currentState) ? "Norm" : "Norm";
     SetWindowTextA(m_toggleNormalMapBtn, newText);
     
     UpdateRender();
@@ -751,7 +751,7 @@ void RenderWindow::OnToggleAxesGrid() {
     m_renderer->setDrawAxesAndGrid(!currentState);
     
     // 更新按钮文本
-    const char* newText = (!currentState) ? "Axes/Grid: ON" : "Axes/Grid: OFF";
+    const char* newText = (!currentState) ? "Grid" : "Grid";
     SetWindowTextA(m_toggleAxesGridBtn, newText);
     
     UpdateRender();
@@ -762,10 +762,10 @@ void RenderWindow::OnToggleSSAA() {
     
     if (currentState) {
         m_renderer->disableSSAA();
-        SetWindowTextA(m_toggleSSAABtn, "SSAA: OFF");
+        SetWindowTextA(m_toggleSSAABtn, "OFF");
     } else {
         m_renderer->enableSSAA(true, m_renderer->getSSAAScale());
-        SetWindowTextA(m_toggleSSAABtn, "SSAA: ON");
+        SetWindowTextA(m_toggleSSAABtn, "ON");
     }
     
     UpdateSSAAControls();
@@ -819,12 +819,9 @@ void RenderWindow::UpdateSSAAControls() {
     // 更新状态标签
     char statusText[64];
     if (isEnabled) {
-        int highResWidth = m_renderWidth * scale;
-        int highResHeight = m_renderHeight * scale;
-        sprintf_s(statusText, sizeof(statusText), "SSAA: ON (%dx) [%dx%d->%dx%d]", 
-                 scale, highResWidth, highResHeight, m_renderWidth, m_renderHeight);
+        sprintf_s(statusText, sizeof(statusText), "ON %dx", scale);
     } else {
-        sprintf_s(statusText, sizeof(statusText), "SSAA: OFF (%dx available)", scale);
+        sprintf_s(statusText, sizeof(statusText), "OFF %dx", scale);
     }
     
     SetWindowTextA(m_ssaaStatusLabel, statusText);
@@ -840,7 +837,7 @@ void RenderWindow::OnLoadModel() {
     GetWindowTextA(m_modelFileEdit, buffer, sizeof(buffer));
     
     if (strlen(buffer) == 0) {
-        SetWindowTextA(m_modelStatusLabel, "错误: 请输入文件名");
+        SetWindowTextA(m_modelStatusLabel, "Error: Empty");
         return;
     }
     
@@ -859,8 +856,7 @@ void RenderWindow::OnLoadModel() {
         m_currentModelFile = filename;
         
         // 更新状态标签
-        std::string statusText = "模型: " + filename + " (加载成功)";
-        SetWindowTextA(m_modelStatusLabel, statusText.c_str());
+        SetWindowTextA(m_modelStatusLabel, filename.c_str());
         
         std::cout << "成功加载模型: " << modelPath << std::endl;
         std::cout << "模型包含 " << m_model->getFaceCount() << " 个面" << std::endl;
@@ -869,7 +865,7 @@ void RenderWindow::OnLoadModel() {
         UpdateRender();
     } else {
         // 加载失败
-        std::string statusText = "错误: 无法加载 " + filename;
+        std::string statusText = "Error: " + filename;
         SetWindowTextA(m_modelStatusLabel, statusText.c_str());
         
         std::cout << "加载模型失败: " << modelPath << std::endl;
@@ -883,7 +879,7 @@ void RenderWindow::OnLoadTexture() {
     GetWindowTextA(m_textureFileEdit, buffer, sizeof(buffer));
     
     if (strlen(buffer) == 0) {
-        SetWindowTextA(m_textureStatusLabel, "错误: 请输入文件名");
+        SetWindowTextA(m_textureStatusLabel, "Error: Empty");
         return;
     }
     
@@ -900,8 +896,7 @@ void RenderWindow::OnLoadTexture() {
         m_currentTextureFile = filename;
         
         // 更新状态标签
-        std::string statusText = "纹理: " + filename + " (加载成功)";
-        SetWindowTextA(m_textureStatusLabel, statusText.c_str());
+        SetWindowTextA(m_textureStatusLabel, filename.c_str());
         
         std::cout << "成功加载纹理: " << texturePath << std::endl;
         
@@ -909,7 +904,7 @@ void RenderWindow::OnLoadTexture() {
         UpdateRender();
     } else {
         // 加载失败
-        std::string statusText = "错误: 无法加载 " + filename;
+        std::string statusText = "Error: " + filename;
         SetWindowTextA(m_textureStatusLabel, statusText.c_str());
         
         std::cout << "加载纹理失败: " << texturePath << std::endl;
@@ -923,7 +918,7 @@ void RenderWindow::OnLoadNormalMap() {
     GetWindowTextA(m_normalMapFileEdit, buffer, sizeof(buffer));
     
     if (strlen(buffer) == 0) {
-        SetWindowTextA(m_normalMapStatusLabel, "错误: 请输入文件名");
+        SetWindowTextA(m_normalMapStatusLabel, "Error: Empty");
         return;
     }
     
@@ -940,8 +935,7 @@ void RenderWindow::OnLoadNormalMap() {
         m_currentNormalMapFile = filename;
         
         // 更新状态标签
-        std::string statusText = "法线贴图: " + filename + " (加载成功)";
-        SetWindowTextA(m_normalMapStatusLabel, statusText.c_str());
+        SetWindowTextA(m_normalMapStatusLabel, filename.c_str());
         
         std::cout << "成功加载法线贴图: " << normalMapPath << std::endl;
         
@@ -949,7 +943,7 @@ void RenderWindow::OnLoadNormalMap() {
         UpdateRender();
     } else {
         // 加载失败
-        std::string statusText = "错误: 无法加载 " + filename;
+        std::string statusText = "Error: " + filename;
         SetWindowTextA(m_normalMapStatusLabel, statusText.c_str());
         
         std::cout << "加载法线贴图失败: " << normalMapPath << std::endl;
