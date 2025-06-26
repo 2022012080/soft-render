@@ -50,6 +50,9 @@ private:
     // 纹理
     std::shared_ptr<Texture> currentTexture;
     
+    // 法线贴图
+    std::shared_ptr<Texture> currentNormalMap;
+    
     // 多光源系统
     std::vector<Light> lights;
     float ambientIntensity;
@@ -67,6 +70,9 @@ private:
     
     // 新增：纹理启用控制
     bool m_enableTexture;
+    
+    // 新增：法线贴图启用控制
+    bool m_enableNormalMap;
     
 public:
     Renderer(int w, int h);
@@ -92,6 +98,9 @@ public:
     
     // 设置纹理
     void setTexture(std::shared_ptr<Texture> texture) { currentTexture = texture; }
+    
+    // 设置法线贴图
+    void setNormalMap(std::shared_ptr<Texture> normalMap) { currentNormalMap = normalMap; }
     
     // 设置多光源
     void addLight(const Light& light) { lights.push_back(light); }
@@ -124,6 +133,10 @@ public:
     // 新增：纹理启用控制方法
     void setTextureEnabled(bool enabled) { m_enableTexture = enabled; }
     bool isTextureEnabled() const { return m_enableTexture; }
+    
+    // 新增：法线贴图启用控制方法
+    void setNormalMapEnabled(bool enabled) { m_enableNormalMap = enabled; }
+    bool isNormalMapEnabled() const { return m_enableNormalMap; }
     
     // 渲染模型
     void renderModel(const Model& model);

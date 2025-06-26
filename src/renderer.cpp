@@ -33,6 +33,9 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 初始化纹理启用控制
     m_enableTexture = false;      // 默认关闭贴图
     
+    // 初始化法线贴图启用控制
+    m_enableNormalMap = false;    // 默认关闭法线贴图
+    
     // 初始化法向量变换矩阵
     updateNormalMatrix();
 }
@@ -192,12 +195,14 @@ void Renderer::rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVert
     float x2 = v2.position.x;
     float y2 = v2.position.y;
     
-    // 计算边界框（使用浮点数）
+    // 计算边界框
     int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
     int maxX = std::min(m_highResWidth - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
     int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
     int maxY = std::min(m_highResHeight - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
-
+    if(maxX-minX <= 0 || maxY-minY <= 0) {
+        return;
+    }
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
             // 使用浮点数坐标进行重心坐标计算，保持精度
@@ -366,7 +371,30 @@ Color Renderer::fragmentShader(const ShaderFragment& fragment) {
         baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
     }
     
-    Vec3f finalColor = calculateLighting(fragment.localPos, fragment.localNormal, baseColor);
+    // 处理法线贴图
+    Vec3f normal = fragment.localNormal;
+    if (m_enableNormalMap && currentNormalMap && currentNormalMap->isValid()) {
+        // 从法线贴图采样法线（RGB值在0-255范围内）
+        Vec3f normalMapSample = currentNormalMap->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
+        
+        // 将RGB值从[0,1]范围转换到[-1,1]范围
+        Vec3f tangentSpaceNormal = normalMapSample * 2.0f - Vec3f(1.0f, 1.0f, 1.0f);
+        
+        // 简化的法线扰动：直接在本地坐标系中应用
+        // 这是一个简化的实现，对于球体这样的简单几何体效果已经足够
+        Vec3f N = fragment.localNormal.normalize();
+        
+        // 构建简单的切线空间
+        Vec3f up = (std::abs(N.y) < 0.9f) ? Vec3f(0, 1, 0) : Vec3f(1, 0, 0);
+        Vec3f T = up.cross(N).normalize();  // 切线
+        Vec3f B = N.cross(T);               // 副切线
+        
+        // 将切线空间的法线转换到本地坐标系
+        normal = T * tangentSpaceNormal.x + B * tangentSpaceNormal.y + N * tangentSpaceNormal.z;
+        normal = normal.normalize();
+    }
+    
+    Vec3f finalColor = calculateLighting(fragment.localPos, normal, baseColor);
     
     return Color::fromVec3f(finalColor);
 }
@@ -390,7 +418,9 @@ void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1,
     int maxX = std::min(width - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
     int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
     int maxY = std::min(height - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
-    
+    if(maxX-minX <= 0 || maxY-minY <= 0) {
+        return;
+    }
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
             // 使用浮点数坐标进行重心坐标计算，保持精度
@@ -435,9 +465,7 @@ Vec3f Renderer::barycentric(const Vec2f& a, const Vec2f& b, const Vec2f& c, cons
     float d21 = v2.dot(v1);
     
     float denom = d00 * d11 - d01 * d01;
-    if (std::abs(denom) < 1e-6f) {
-        return Vec3f(1, 0, 0);
-    }
+    
     
     float v = (d11 * d20 - d01 * d21) / denom;
     float w = (d00 * d21 - d01 * d20) / denom;

@@ -27,6 +27,9 @@ public:
     // 新增：纹理控制方法
     void OnToggleTexture();
     
+    // 新增：法线贴图控制方法
+    void OnToggleNormalMap();
+    
     // 新增：坐标轴和网格线控制方法
     void OnToggleAxesGrid();
     
@@ -37,6 +40,12 @@ public:
     
     // 新增：模型加载方法
     void OnLoadModel();
+    
+    // 新增：纹理加载方法
+    void OnLoadTexture();
+    
+    // 新增：法线贴图加载方法
+    void OnLoadNormalMap();
     
     void OnCameraChanged();
     void OnObjectChanged(); // 新增：物体坐标变化处理
@@ -79,6 +88,9 @@ private:
     // 新增：纹理控制按钮
     HWND m_toggleTextureBtn;
     
+    // 新增：法线贴图控制按钮
+    HWND m_toggleNormalMapBtn;
+    
     // 新增：坐标轴和网格线控制按钮
     HWND m_toggleAxesGridBtn;
     
@@ -90,10 +102,19 @@ private:
     HWND m_modelFileEdit, m_loadModelBtn;
     HWND m_modelStatusLabel;
     
+    // 新增：纹理贴图输入控件
+    HWND m_textureFileEdit, m_loadTextureBtn;
+    HWND m_textureStatusLabel;
+    
+    // 新增：法线贴图输入控件
+    HWND m_normalMapFileEdit, m_loadNormalMapBtn;
+    HWND m_normalMapStatusLabel;
+    
     // Rendering
     std::unique_ptr<Renderer> m_renderer;
     std::unique_ptr<Model> m_model;
     std::shared_ptr<Texture> m_texture;
+    std::shared_ptr<Texture> m_normalMap;
     
     // Window properties
     int m_windowWidth, m_windowHeight;
@@ -121,6 +142,12 @@ private:
     
     // 新增：当前模型文件名
     std::string m_currentModelFile;
+    
+    // 新增：当前纹理文件名
+    std::string m_currentTextureFile;
+    
+    // 新增：当前法线贴图文件名
+    std::string m_currentNormalMapFile;
     
     // DIB for displaying
     HBITMAP m_bitmap;
@@ -153,6 +180,9 @@ private:
     // 新增：纹理控制ID
     static const int ID_TOGGLE_TEXTURE = 1029;
     
+    // 新增：法线贴图控制ID
+    static const int ID_TOGGLE_NORMAL_MAP = 1038;
+    
     // 新增：坐标轴和网格线控制ID
     static const int ID_TOGGLE_AXES_GRID = 1030;
     
@@ -178,4 +208,12 @@ private:
     // 新增：模型文件控制ID
     static const int ID_MODEL_FILE = 1032;
     static const int ID_LOAD_MODEL = 1033;
+    
+    // 新增：纹理贴图控制ID
+    static const int ID_TEXTURE_FILE = 1034;
+    static const int ID_LOAD_TEXTURE = 1035;
+    
+    // 新增：法线贴图控制ID
+    static const int ID_NORMAL_MAP_FILE = 1036;
+    static const int ID_LOAD_NORMAL_MAP = 1037;
 }; 
