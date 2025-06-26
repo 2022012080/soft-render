@@ -53,6 +53,7 @@ public:
     void OnLightChanged();
     void OnLight2Changed(); // 新增：第二个光源变化处理
     void OnLightingChanged(); // 新增：光照系数变化处理
+    void OnBRDFParameterChanged(); // 新增：BRDF参数变化处理
     void RenderToWindow();
     
 private:
@@ -140,6 +141,13 @@ private:
     // 新增：高光指数设置
     float m_shininess;
     
+    // 新增：BRDF 模型参数
+    float m_roughness;     // 粗糙度
+    float m_metallic;      // 金属度
+    
+    // 新增：能量补偿参数
+    float m_energyCompensationScale;  // 能量补偿强度
+    
     // 新增：当前模型文件名
     std::string m_currentModelFile;
     
@@ -216,4 +224,22 @@ private:
     // 新增：法线贴图控制ID
     static const int ID_NORMAL_MAP_FILE = 1036;
     static const int ID_LOAD_NORMAL_MAP = 1037;
+    
+    // 新增：BRDF 控件
+    HWND m_roughnessEdit;
+    HWND m_metallicEdit;
+    HWND m_brdfCheckbox;
+    
+    // 新增：能量补偿控件
+    HWND m_energyCompensationCheckbox;
+    HWND m_energyCompensationScaleEdit;
+    
+    // 新增：BRDF 控制ID
+    static const int ID_BRDF_ENABLE = 1040;
+    static const int ID_ROUGHNESS = 1041;
+    static const int ID_METALLIC = 1042;
+    
+    // 新增：能量补偿控制ID
+    static const int ID_ENERGY_COMPENSATION_ENABLE = 1043;
+    static const int ID_ENERGY_COMPENSATION_SCALE = 1044;
 }; 

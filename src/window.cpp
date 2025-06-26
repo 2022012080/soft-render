@@ -21,6 +21,9 @@ RenderWindow::RenderWindow(int width, int height)
     , m_currentModelFile("sphere.obj") // 默认模型文件
     , m_currentTextureFile("texture.bmp") // 默认纹理文件
     , m_currentNormalMapFile("normal.bmp") // 默认法线贴图文件
+    , m_roughness(0.5f)        // 新增：粗糙度初始化
+    , m_metallic(0.0f)         // 新增：金属度初始化
+    , m_energyCompensationScale(1.0f)  // 新增：能量补偿强度初始化
 {
     m_renderer = std::make_unique<Renderer>(m_renderWidth, m_renderHeight);
     m_model = std::make_unique<Model>();
@@ -130,6 +133,9 @@ bool RenderWindow::Initialize() {
     OnLightChanged();     // 第一个光源
     OnLight2Changed();    // 第二个光源
     OnLightingChanged();  // 光照系数
+    
+    // 设置能量补偿复选框的默认状态为选中
+    SendMessage(m_energyCompensationCheckbox, BM_SETCHECK, BST_CHECKED, 0);
     
     // Initial render
     UpdateRender();
@@ -335,6 +341,47 @@ void RenderWindow::CreateControls() {
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
         10, 10, m_renderWidth, m_renderHeight, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    // BRDF Model controls
+    CreateWindowA("STATIC", "BRDF Model:", WS_VISIBLE | WS_CHILD,
+        1220, 520, 80, 15, m_hwnd, NULL, NULL, NULL);
+    
+    m_brdfCheckbox = CreateWindowA("BUTTON", "Enable BRDF", 
+                                   WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
+                                   1220, 535, 100, 20, m_hwnd, 
+                                   (HMENU)ID_BRDF_ENABLE, NULL, NULL);
+    
+    // Roughness control
+    CreateWindowA("STATIC", "Rough:", WS_VISIBLE | WS_CHILD,
+        1220, 560, 45, 15, m_hwnd, NULL, NULL, NULL);
+    
+    m_roughnessEdit = CreateWindowA("EDIT", "0.5", 
+                                    WS_VISIBLE | WS_CHILD | WS_BORDER,
+                                    1270, 560, 50, 20, m_hwnd, 
+                                    (HMENU)ID_ROUGHNESS, NULL, NULL);
+    
+    // Metallic control
+    CreateWindowA("STATIC", "Metal:", WS_VISIBLE | WS_CHILD,
+        1330, 560, 40, 15, m_hwnd, NULL, NULL, NULL);
+    
+    m_metallicEdit = CreateWindowA("EDIT", "0.0", 
+                                   WS_VISIBLE | WS_CHILD | WS_BORDER,
+                                   1375, 560, 50, 20, m_hwnd, 
+                                   (HMENU)ID_METALLIC, NULL, NULL);
+    
+    // 能量补偿控件
+    m_energyCompensationCheckbox = CreateWindowA("BUTTON", "Energy Compensation", 
+                                                  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
+                                                  1220, 585, 140, 20, m_hwnd, 
+                                                  (HMENU)ID_ENERGY_COMPENSATION_ENABLE, NULL, NULL);
+    
+    CreateWindowA("STATIC", "EC Scale:", WS_VISIBLE | WS_CHILD,
+        1220, 610, 60, 15, m_hwnd, NULL, NULL, NULL);
+    
+    m_energyCompensationScaleEdit = CreateWindowA("EDIT", "1.0", 
+                                                   WS_VISIBLE | WS_CHILD | WS_BORDER,
+                                                   1285, 610, 50, 20, m_hwnd, 
+                                                   (HMENU)ID_ENERGY_COMPENSATION_SCALE, NULL, NULL);
 }
 
 void RenderWindow::Run() {
@@ -387,6 +434,12 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnLightingChanged();
             } else if (controlId == ID_SHININESS) {
                 OnLightingChanged();  // shininess变化也调用OnLightingChanged
+            } else if (controlId == ID_ROUGHNESS) {
+                OnBRDFParameterChanged();
+            } else if (controlId == ID_METALLIC) {
+                OnBRDFParameterChanged();
+            } else if (controlId == ID_ENERGY_COMPENSATION_SCALE) {
+                OnBRDFParameterChanged();
             }
         } else if (HIWORD(wParam) == BN_CLICKED) {
             int controlId = LOWORD(wParam);
@@ -416,6 +469,14 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnLoadTexture();
             } else if (controlId == ID_LOAD_NORMAL_MAP) {
                 OnLoadNormalMap();
+            } else if (controlId == ID_BRDF_ENABLE) {
+                bool enabled = (SendMessage(m_brdfCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                m_renderer->setBRDFEnabled(enabled);
+                UpdateRender();
+            } else if (controlId == ID_ENERGY_COMPENSATION_ENABLE) {
+                bool enabled = (SendMessage(m_energyCompensationCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                m_renderer->setEnergyCompensationEnabled(enabled);
+                UpdateRender();
             }
         }
         return 0;
@@ -613,6 +674,20 @@ void RenderWindow::UpdateRender() {
     m_renderer->setSpecularStrength(m_specularStrength);
     m_renderer->setAmbientStrength(m_ambientStrength);
     m_renderer->setShininess(m_shininess);  // 新增：设置高光指数
+    
+    // 设置 BRDF 参数
+    m_renderer->setRoughness(m_roughness);
+    m_renderer->setMetallic(m_metallic);
+    m_renderer->setEnergyCompensationScale(m_energyCompensationScale);
+    
+    // 根据材质类型设置 F0
+    if (m_metallic > 0.5f) {
+        // 金属材质使用反照率作为 F0
+        m_renderer->setF0(Vec3f(0.7f, 0.7f, 0.7f));  // 银色金属
+    } else {
+        // 非金属材质使用标准 F0
+        m_renderer->setF0(Vec3f(0.04f, 0.04f, 0.04f));
+    }
     
     // Clear and render
     m_renderer->clear(Color(50, 50, 100));
@@ -949,4 +1024,23 @@ void RenderWindow::OnLoadNormalMap() {
         std::cout << "加载法线贴图失败: " << normalMapPath << std::endl;
         std::cout << "请确认文件存在于assets文件夹中且为BMP格式" << std::endl;
     }
+}
+
+void RenderWindow::OnBRDFParameterChanged() {
+    char buffer[32];
+    
+    GetWindowTextA(m_roughnessEdit, buffer, sizeof(buffer));
+    m_roughness = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_metallicEdit, buffer, sizeof(buffer));
+    m_metallic = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_energyCompensationScaleEdit, buffer, sizeof(buffer));
+    m_energyCompensationScale = static_cast<float>(atof(buffer));
+    
+    m_renderer->setRoughness(m_roughness);
+    m_renderer->setMetallic(m_metallic);
+    m_renderer->setEnergyCompensationScale(m_energyCompensationScale);
+    
+    UpdateRender();
 } 

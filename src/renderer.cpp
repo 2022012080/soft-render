@@ -36,6 +36,17 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 初始化法线贴图启用控制
     m_enableNormalMap = false;    // 默认关闭法线贴图
     
+    // 新增：初始化 BRDF 模型参数
+    m_enableBRDF = false;         // 默认关闭 BRDF
+    m_roughness = 0.5f;           // 中等粗糙度
+    m_metallic = 0.0f;            // 非金属材质
+    m_F0 = Vec3f(0.04f, 0.04f, 0.04f);  // 非金属的基础反射率
+    
+    // 新增：初始化能量补偿参数
+    m_enableEnergyCompensation = true;   // 默认启用能量补偿
+    m_energyCompensationScale = 1.0f;    // 默认补偿强度
+    m_lutInitialized = false;            // 查找表未初始化
+    
     // 初始化法向量变换矩阵
     updateNormalMatrix();
 }
@@ -200,9 +211,7 @@ void Renderer::rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVert
     int maxX = std::min(m_highResWidth - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
     int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
     int maxY = std::min(m_highResHeight - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
-    if(maxX-minX <= 0 || maxY-minY <= 0) {
-        return;
-    }
+
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
             // 使用浮点数坐标进行重心坐标计算，保持精度
@@ -381,10 +390,9 @@ Color Renderer::fragmentShader(const ShaderFragment& fragment) {
         Vec3f tangentSpaceNormal = normalMapSample * 2.0f - Vec3f(1.0f, 1.0f, 1.0f);
         
         // 简化的法线扰动：直接在本地坐标系中应用
-        // 这是一个简化的实现，对于球体这样的简单几何体效果已经足够
         Vec3f N = fragment.localNormal.normalize();
         
-        // 构建简单的切线空间
+        // 切线空间
         Vec3f up = (std::abs(N.y) < 0.9f) ? Vec3f(0, 1, 0) : Vec3f(1, 0, 0);
         Vec3f T = up.cross(N).normalize();  // 切线
         Vec3f B = N.cross(T);               // 副切线
@@ -394,7 +402,16 @@ Color Renderer::fragmentShader(const ShaderFragment& fragment) {
         normal = normal.normalize();
     }
     
-    Vec3f finalColor = calculateLighting(fragment.localPos, normal, baseColor);
+    Vec3f finalColor;
+    
+    // 根据是否启用法线贴图来选择光照模型
+    if (!m_enableNormalMap && m_enableBRDF) {
+        // 当不使用法线贴图时，启用 BRDF 模型
+        finalColor = calculateBRDFLighting(fragment.localPos, normal, baseColor);
+    } else {
+        // 使用传统 Phong 光照模型
+        finalColor = calculateLighting(fragment.localPos, normal, baseColor);
+    }
     
     return Color::fromVec3f(finalColor);
 }
@@ -408,19 +425,12 @@ void Renderer::rasterizeTriangle(const ShaderVertex& v0, const ShaderVertex& v1,
     float x2 = v2.position.x;
     float y2 = v2.position.y;
     
-    float area = 0.5f * std::abs((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0));
-    if (area < 0.5f) {  // 跳过面积过小的三角形
-        return;
-    }
-    
     // 计算边界框（使用浮点数）
     int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
     int maxX = std::min(width - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
     int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
     int maxY = std::min(height - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
-    if(maxX-minX <= 0 || maxY-minY <= 0) {
-        return;
-    }
+   
     for (int y = minY; y <= maxY; y++) {
         for (int x = minX; x <= maxX; x++) {
             // 使用浮点数坐标进行重心坐标计算，保持精度
@@ -1118,4 +1128,270 @@ Light& Renderer::getLight(int index) {
         return lights[index];
     }
     return defaultLight;
+}
+
+Vec3f Renderer::calculateBRDFLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
+    // 环境光
+    Vec3f ambient = baseColor * (ambientIntensity * ambientStrength);
+    
+    // 初始化总光照贡献
+    Vec3f totalLighting = ambient;
+    
+    // 计算所有光源的 BRDF 贡献
+    for (const auto& light : lights) {
+        if (light.enabled) {
+            totalLighting += calculateSingleLightBRDF(light, localPos, localNormal, baseColor);
+        }
+    }
+    
+    return totalLighting;
+}
+
+Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
+    // 在本地坐标系中计算光照
+    Vec3f lightVector = light.position - localPos;
+    float distance = lightVector.length();
+    Vec3f L = lightVector.normalize();  // 光照方向
+    Vec3f N = localNormal.normalize();  // 法线方向
+    
+    // 计算视角方向
+    Vec3f worldCameraPos = VectorMath::inverse(viewMatrix) * Vec3f(0, 0, 0);
+    Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
+    Vec3f localCameraPos = invModelMatrix * worldCameraPos;
+    Vec3f V = (localCameraPos - localPos).normalize();  // 视角方向
+    
+    // 半程向量
+    Vec3f H = (V + L).normalize();
+    
+    // 计算各种点积
+    float NdotV = std::max(0.0f, N.dot(V));
+    float NdotL = std::max(0.0f, N.dot(L));
+    float HdotV = std::max(0.0f, H.dot(V));
+    
+    // 如果表面背向光源，返回黑色
+    if (NdotL <= 0.0f) {
+        return Vec3f(0, 0, 0);
+    }
+    
+    // 距离衰减
+    float attenuation = light.intensity / (distance * distance);
+    
+    // Cook-Torrance BRDF 计算
+    float D = distributionGGX(N, H, m_roughness);           // 法线分布函数
+    float G = geometrySmith(N, V, L, m_roughness);          // 几何遮蔽函数
+    Vec3f F = fresnelSchlick(HdotV, m_F0);                  // 菲涅尔项
+    
+    // 计算镜面反射项
+    Vec3f numerator = Vec3f(D, D, D) * G * F;
+    float denominator = 4.0f * (NdotV + 0.0001f) * (NdotL + 0.0001f);    // 防止除零
+    Vec3f specular = numerator / denominator;
+    
+    // 能量守恒：漫反射 = (1 - 镜面反射) * (1 - 金属度)
+    Vec3f kS = F;  // 镜面反射系数
+    Vec3f kD = Vec3f(1.0f, 1.0f, 1.0f) - kS;  // 漫反射系数
+    kD = kD * (1.0f - m_metallic);  // 金属材质没有漫反射
+    
+    // Lambert 漫反射
+    Vec3f diffuse = kD * baseColor * (1.0f / 3.14159265359f);
+    
+    // 新增：能量补偿计算
+    Vec3f energyCompensation(0, 0, 0);
+    if (m_enableEnergyCompensation && m_roughness > 0.01f) {
+        energyCompensation = calculateEnergyCompensationTerm(N, V, L, m_roughness, m_F0);
+        energyCompensation = energyCompensation * m_energyCompensationScale;
+    }
+    
+    // 最终颜色
+    Vec3f radiance = light.color * attenuation;
+    Vec3f color = (diffuse + specular + energyCompensation) * radiance * NdotL;
+    
+    // BRDF 不使用 Blinn-Phong 的 diffuseStrength 系数
+    // BRDF 本身已经包含正确的能量分配，不需要额外缩放
+    
+    return color;
+}
+
+// GGX 法线分布函数 (Trowbridge-Reitz)
+float Renderer::distributionGGX(const Vec3f& N, const Vec3f& H, float roughness) const {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = std::max(0.0f, N.dot(H));
+    float NdotH2 = NdotH * NdotH;
+    
+    float num = a2;
+    float denom = (NdotH2 * (a2 - 1.0f) + 1.0f);
+    denom = M_PI * denom * denom;
+    
+    return num / denom;
+}
+
+// Smith 几何遮蔽函数
+float Renderer::geometrySchlickGGX(float NdotV, float roughness) const {
+    float r = (roughness + 1.0f);
+    float k = (r * r) / 8.0f;
+    
+    float num = NdotV;
+    float denom = NdotV * (1.0f - k) + k;
+    
+    return num / denom;
+}
+
+float Renderer::geometrySmith(const Vec3f& N, const Vec3f& V, const Vec3f& L, float roughness) const {
+    float NdotV = std::max(0.0001f, N.dot(V)); 
+    float NdotL = std::max(0.0001f, N.dot(L)); 
+    float ggx2 = geometrySchlickGGX(NdotV, roughness);
+    float ggx1 = geometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+// Fresnel 方程 (Schlick 近似)
+Vec3f Renderer::fresnelSchlick(float cosTheta, const Vec3f& F0) const {
+    float power = std::pow(1.0f - cosTheta, 5.0f);
+    return F0 + (Vec3f(1.0f, 1.0f, 1.0f) - F0) * power;
+}
+
+// 新增：初始化能量补偿查找表
+void Renderer::initializeEnergyCompensationLUT() const {
+    if (m_lutInitialized) return;
+    
+    // 初始化查找表尺寸
+    m_energyCompensationLUT.resize(LUT_SIZE);
+    for (int i = 0; i < LUT_SIZE; i++) {
+        m_energyCompensationLUT[i].resize(LUT_SIZE);
+    }
+    
+    // 预计算能量补偿值
+    for (int roughnessIdx = 0; roughnessIdx < LUT_SIZE; roughnessIdx++) {
+        for (int cosThetaIdx = 0; cosThetaIdx < LUT_SIZE; cosThetaIdx++) {
+            float roughness = static_cast<float>(roughnessIdx) / (LUT_SIZE - 1);
+            float cosTheta = static_cast<float>(cosThetaIdx) / (LUT_SIZE - 1);
+            
+            // 防止除零
+            roughness = std::max(0.01f, roughness);
+            cosTheta = std::max(0.01f, cosTheta);
+            
+            // 计算能量积分
+            m_energyCompensationLUT[roughnessIdx][cosThetaIdx] = computeEnergyIntegral(roughness, cosTheta);
+        }
+    }
+    
+    m_lutInitialized = true;
+}
+
+// 新增：查找能量补偿值
+float Renderer::lookupEnergyCompensation(float roughness, float cosTheta) const {
+    // 确保查找表已初始化
+    initializeEnergyCompensationLUT();
+    
+    // 将输入值映射到查找表索引
+    roughness = std::max(0.01f, std::min(1.0f, roughness));
+    cosTheta = std::max(0.01f, std::min(1.0f, cosTheta));
+    
+    float roughnessFloat = roughness * (LUT_SIZE - 1);
+    float cosThetaFloat = cosTheta * (LUT_SIZE - 1);
+    
+    int roughnessIdx0 = static_cast<int>(roughnessFloat);
+    int cosThetaIdx0 = static_cast<int>(cosThetaFloat);
+    int roughnessIdx1 = std::min(roughnessIdx0 + 1, LUT_SIZE - 1);
+    int cosThetaIdx1 = std::min(cosThetaIdx0 + 1, LUT_SIZE - 1);
+    
+    float roughnessFrac = roughnessFloat - roughnessIdx0;
+    float cosThetaFrac = cosThetaFloat - cosThetaIdx0;
+    
+    // 双线性插值
+    float v00 = m_energyCompensationLUT[roughnessIdx0][cosThetaIdx0];
+    float v01 = m_energyCompensationLUT[roughnessIdx0][cosThetaIdx1];
+    float v10 = m_energyCompensationLUT[roughnessIdx1][cosThetaIdx0];
+    float v11 = m_energyCompensationLUT[roughnessIdx1][cosThetaIdx1];
+    
+    float v0 = v00 * (1.0f - cosThetaFrac) + v01 * cosThetaFrac;
+    float v1 = v10 * (1.0f - cosThetaFrac) + v11 * cosThetaFrac;
+    
+    return v0 * (1.0f - roughnessFrac) + v1 * roughnessFrac;
+}
+
+// 新增：计算能量积分（简化的蒙特卡洛积分）
+float Renderer::computeEnergyIntegral(float roughness, float cosTheta) const {
+    const int numSamples = 32;  // 样本数量
+    float totalEnergy = 0.0f;
+    
+    // 简化的蒙特卡洛积分
+    for (int i = 0; i < numSamples; i++) {
+        for (int j = 0; j < numSamples; j++) {
+            // 生成半球面采样方向
+            float xi1 = static_cast<float>(i) / numSamples;
+            float xi2 = static_cast<float>(j) / numSamples;
+            
+            // 重要性采样：基于GGX分布
+            float a = roughness * roughness;
+            float a2 = a * a;
+            
+            float theta = std::acos(std::sqrt((1.0f - xi1) / (xi1 * (a2 - 1.0f) + 1.0f)));
+            float phi = 2.0f * M_PI * xi2;
+            
+            // 计算采样方向
+            float sinTheta = std::sin(theta);
+            Vec3f sampleDir(sinTheta * std::cos(phi), sinTheta * std::sin(phi), std::cos(theta));
+            
+            // 假设视角方向为(0,0,1)
+            Vec3f V(0, 0, 1);
+            Vec3f N(0, 0, 1);
+            Vec3f L = sampleDir;
+            Vec3f H = (V + L).normalize();
+            
+            float NdotL = std::max(0.0f, N.dot(L));
+            float NdotV = std::max(0.0f, N.dot(V));
+            float VdotH = std::max(0.0f, V.dot(H));
+            
+            if (NdotL > 0.0f && NdotV > 0.0f) {
+                // 计算BRDF项
+                float D = distributionGGX(N, H, roughness);
+                float G = geometrySmith(N, V, L, roughness);
+                
+                // 计算能量贡献
+                float brdfContrib = (D * G) / (4.0f * NdotV * NdotL + 0.0001f);
+                totalEnergy += brdfContrib * NdotL;
+            }
+        }
+    }
+    
+    // 归一化
+    totalEnergy /= (numSamples * numSamples);
+    
+    // 计算能量损失：理想情况下应该为1.0，实际小于1.0的部分就是损失
+    float energyLoss = std::max(0.0f, 1.0f - totalEnergy);
+    
+    return energyLoss;
+}
+
+// 新增：计算能量补偿项
+Vec3f Renderer::calculateEnergyCompensationTerm(const Vec3f& N, const Vec3f& V, const Vec3f& L, 
+                                                 float roughness, const Vec3f& F0) const {
+    float NdotV = std::max(0.0f, N.dot(V));
+    float NdotL = std::max(0.0f, N.dot(L));
+    
+    // 查找能量损失
+    float energyLossV = lookupEnergyCompensation(roughness, NdotV);
+    float energyLossL = lookupEnergyCompensation(roughness, NdotL);
+    
+    // 计算平均能量损失
+    float avgEnergyLoss = (energyLossV + energyLossL) * 0.5f;
+    
+    // 基于菲涅尔项计算补偿强度
+    Vec3f H = (V + L).normalize();
+    float HdotV = std::max(0.0f, H.dot(V));
+    Vec3f F = fresnelSchlick(HdotV, F0);
+    
+    // 能量补偿项：补偿由于微表面遮蔽而损失的能量
+    // 使用一个简化的模型：损失的能量按照菲涅尔系数重新分配
+    Vec3f energyCompensation = F * avgEnergyLoss * (1.0f / M_PI);
+    
+    // 针对粗糙表面，增加额外的散射项来模拟多次散射
+    if (roughness > 0.3f) {
+        float roughnessFactor = (roughness - 0.3f) / 0.7f;  // 0.3到1.0映射到0到1
+        Vec3f multiScatter = F0 * avgEnergyLoss * roughnessFactor * 0.5f;
+        energyCompensation += multiScatter;
+    }
+    
+    return energyCompensation;
 }

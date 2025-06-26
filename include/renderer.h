@@ -74,6 +74,21 @@ private:
     // 新增：法线贴图启用控制
     bool m_enableNormalMap;
     
+    // 新增：BRDF 模型控制
+    bool m_enableBRDF;            // BRDF 模型启用开关
+    float m_roughness;            // 表面粗糙度 (0-1)
+    float m_metallic;             // 金属度 (0-1)
+    Vec3f m_F0;                   // 基础反射率（菲涅尔F0）
+    
+    // 新增：能量补偿相关参数
+    bool m_enableEnergyCompensation;  // 能量补偿启用开关
+    float m_energyCompensationScale;   // 能量补偿强度缩放因子
+    
+    // 新增：预计算的能量补偿查找表
+    mutable std::vector<std::vector<float>> m_energyCompensationLUT;
+    mutable bool m_lutInitialized;
+    static constexpr int LUT_SIZE = 64;  // 查找表分辨率
+    
 public:
     Renderer(int w, int h);
     
@@ -107,7 +122,7 @@ public:
     void setLight(int index, const Light& light);
     void removeLight(int index);
     void clearLights() { lights.clear(); }
-    int getLightCount() const { return lights.size(); }
+    int getLightCount() const { return static_cast<int>(lights.size()); }
     const Light& getLight(int index) const;
     Light& getLight(int index);
     void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
@@ -137,6 +152,22 @@ public:
     // 新增：法线贴图启用控制方法
     void setNormalMapEnabled(bool enabled) { m_enableNormalMap = enabled; }
     bool isNormalMapEnabled() const { return m_enableNormalMap; }
+    
+    // 新增：BRDF 模型控制方法
+    void setBRDFEnabled(bool enabled) { m_enableBRDF = enabled; }
+    bool isBRDFEnabled() const { return m_enableBRDF; }
+    void setRoughness(float roughness) { m_roughness = std::max(0.01f, std::min(1.0f, roughness)); }
+    void setMetallic(float metallic) { m_metallic = std::max(0.0f, std::min(1.0f, metallic)); }
+    void setF0(const Vec3f& f0) { m_F0 = f0; }
+    float getRoughness() const { return m_roughness; }
+    float getMetallic() const { return m_metallic; }
+    Vec3f getF0() const { return m_F0; }
+    
+    // 新增：能量补偿控制方法
+    void setEnergyCompensationEnabled(bool enabled) { m_enableEnergyCompensation = enabled; }
+    bool isEnergyCompensationEnabled() const { return m_enableEnergyCompensation; }
+    void setEnergyCompensationScale(float scale) { m_energyCompensationScale = std::max(0.0f, std::min(2.0f, scale)); }
+    float getEnergyCompensationScale() const { return m_energyCompensationScale; }
     
     // 渲染模型
     void renderModel(const Model& model);
@@ -238,6 +269,20 @@ private:
     // 计算单个光源的光照贡献
     Vec3f calculateSingleLight(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
     
+    // BRDF 相关计算函数
+    Vec3f calculateBRDFLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
+    Vec3f calculateSingleLightBRDF(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
+    
+    // GGX 法线分布函数 (Trowbridge-Reitz)
+    float distributionGGX(const Vec3f& N, const Vec3f& H, float roughness) const;
+    
+    // Smith 几何遮蔽函数的子函数
+    float geometrySchlickGGX(float NdotV, float roughness) const;
+    float geometrySmith(const Vec3f& N, const Vec3f& V, const Vec3f& L, float roughness) const;
+    
+    // Fresnel 方程 (Schlick 近似)
+    Vec3f fresnelSchlick(float cosTheta, const Vec3f& F0) const;
+    
     // 正面剔除
     bool isFrontFace(const Vec3f& v0, const Vec3f& v1, const Vec3f& v2);
     
@@ -249,4 +294,11 @@ private:
     
     // 绘制单个光源位置
     void drawSingleLightPosition(const Light& light, int lightIndex = 0);
+    
+    // 新增：能量补偿相关函数
+    void initializeEnergyCompensationLUT() const;
+    float lookupEnergyCompensation(float roughness, float cosTheta) const;
+    float computeEnergyIntegral(float roughness, float cosTheta) const;
+    Vec3f calculateEnergyCompensationTerm(const Vec3f& N, const Vec3f& V, const Vec3f& L, 
+                                          float roughness, const Vec3f& F0) const;
 }; 
