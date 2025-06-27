@@ -14,6 +14,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_fov(20.0f)  // 初始FOV为20度
     , m_lightX(3.0f), m_lightY(-2.0f), m_lightZ(3.0f), m_lightIntensity(30.0f)
     , m_light2X(-3.0f), m_light2Y(2.0f), m_light2Z(1.0f), m_light2Intensity(0.0f) // 第二个光源
+    , m_dirLightX(0.0f), m_dirLightY(-1.0f), m_dirLightZ(0.0f), m_dirLightIntensity(5.0f) // 平面光源：向下照射
     , m_diffuseStrength(0.2f), m_specularStrength(2.0f), m_ambientStrength(0.15f) // 光照系数
     , m_shininess(128.0f) // 新增：高光指数初始化
     , m_hwnd(nullptr), m_renderArea(nullptr)
@@ -23,6 +24,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_currentNormalMapFile("normal.bmp") // 默认法线贴图文件
     , m_roughness(0.5f)        // 新增：粗糙度初始化
     , m_metallic(0.0f)         // 新增：金属度初始化
+    , m_f0R(0.04f), m_f0G(0.04f), m_f0B(0.04f)  // 新增：菲涅尔F0初始化
     , m_energyCompensationScale(1.0f)  // 新增：能量补偿强度初始化
 {
     m_renderer = std::make_unique<Renderer>(m_renderWidth, m_renderHeight);
@@ -132,7 +134,9 @@ bool RenderWindow::Initialize() {
     OnCameraChanged();    // 摄像机角度
     OnLightChanged();     // 第一个光源
     OnLight2Changed();    // 第二个光源
+    OnDirLightChanged();  // 新增：平面光源
     OnLightingChanged();  // 光照系数
+    OnBRDFParameterChanged();  // 新增：BRDF参数包括F0
     
     // 设置能量补偿复选框的默认状态为选中
     SendMessage(m_energyCompensationCheckbox, BM_SETCHECK, BST_CHECKED, 0);
@@ -226,117 +230,137 @@ void RenderWindow::CreateControls() {
     m_light2IntensityEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1370, 185, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LIGHT2_INTENSITY, GetModuleHandle(nullptr), nullptr);
     
+    // Directional Light controls
+    m_dirLightLabel = CreateWindowA("STATIC", "DirLight (X,Y,Z):", WS_VISIBLE | WS_CHILD,
+        1220, 210, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_dirLightXEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1220, 225, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIRLIGHT_X, GetModuleHandle(nullptr), nullptr);
+    
+    m_dirLightYEdit = CreateWindowA("EDIT", "-1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1270, 225, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIRLIGHT_Y, GetModuleHandle(nullptr), nullptr);
+    
+    m_dirLightZEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1320, 225, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIRLIGHT_Z, GetModuleHandle(nullptr), nullptr);
+    
+    // Directional Light intensity control
+    CreateWindowA("STATIC", "Intensity:", WS_VISIBLE | WS_CHILD,
+        1370, 210, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_dirLightIntensityEdit = CreateWindowA("EDIT", "5.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1370, 225, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIRLIGHT_INTENSITY, GetModuleHandle(nullptr), nullptr);
+    
     // Lighting coefficients
     m_lightingLabel = CreateWindowA("STATIC", "Lighting:", WS_VISIBLE | WS_CHILD,
-        1220, 210, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 250, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     CreateWindowA("STATIC", "Diff:", WS_VISIBLE | WS_CHILD,
-        1220, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 265, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_diffuseEdit = CreateWindowA("EDIT", "0.2", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 240, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIFFUSE_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        1220, 280, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_DIFFUSE_STRENGTH, GetModuleHandle(nullptr), nullptr);
     
     CreateWindowA("STATIC", "Spec:", WS_VISIBLE | WS_CHILD,
-        1270, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1270, 265, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_specularEdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1270, 240, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_SPECULAR_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        1270, 280, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_SPECULAR_STRENGTH, GetModuleHandle(nullptr), nullptr);
     
     CreateWindowA("STATIC", "Amb:", WS_VISIBLE | WS_CHILD,
-        1320, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1320, 265, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_ambientEdit = CreateWindowA("EDIT", "0.15", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1320, 240, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_AMBIENT_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        1320, 280, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_AMBIENT_STRENGTH, GetModuleHandle(nullptr), nullptr);
     
     // Shininess control
     CreateWindowA("STATIC", "Shin:", WS_VISIBLE | WS_CHILD,
-        1370, 225, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1370, 265, 35, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     m_shininessEdit = CreateWindowA("EDIT", "128.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1370, 240, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_SHININESS, GetModuleHandle(nullptr), nullptr);
+        1370, 280, 50, 20, m_hwnd, (HMENU)(LONG_PTR)ID_SHININESS, GetModuleHandle(nullptr), nullptr);
     
     // FOV controls
     CreateWindowA("STATIC", "FOV:", WS_VISIBLE | WS_CHILD,
-        1220, 265, 30, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 300, 30, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_fovDecreaseBtn = CreateWindowA("BUTTON", "(-)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 280, 30, 25, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
+        1220, 315, 30, 25, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_DECREASE, GetModuleHandle(nullptr), nullptr);
     
     m_fovIncreaseBtn = CreateWindowA("BUTTON", "(+)", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1255, 280, 30, 25, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
+        1255, 315, 30, 25, m_hwnd, (HMENU)(LONG_PTR)ID_FOV_INCREASE, GetModuleHandle(nullptr), nullptr);
     
     // Render controls
     CreateWindowA("STATIC", "Render:", WS_VISIBLE | WS_CHILD,
-        1220, 310, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 350, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_toggleEdgesBtn = CreateWindowA("BUTTON", "Edge", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
+        1220, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EDGES, GetModuleHandle(nullptr), nullptr);
     
     m_toggleRaysBtn = CreateWindowA("BUTTON", "Ray", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1265, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
+        1265, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_RAYS, GetModuleHandle(nullptr), nullptr);
     
     // Texture controls
     m_toggleTextureBtn = CreateWindowA("BUTTON", "Tex", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1310, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_TEXTURE, GetModuleHandle(nullptr), nullptr);
+        1310, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_TEXTURE, GetModuleHandle(nullptr), nullptr);
     
     // Normal map control
     m_toggleNormalMapBtn = CreateWindowA("BUTTON", "Norm", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1355, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
+        1355, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
     
     // Axes/Grid control
     m_toggleAxesGridBtn = CreateWindowA("BUTTON", "Grid", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1400, 325, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_AXES_GRID, GetModuleHandle(nullptr), nullptr);
+        1400, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_AXES_GRID, GetModuleHandle(nullptr), nullptr);
     
     // SSAA controls
     CreateWindowA("STATIC", "SSAA:", WS_VISIBLE | WS_CHILD,
-        1220, 355, 40, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 395, 40, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_toggleSSAABtn = CreateWindowA("BUTTON", "OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1220, 370, 35, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
+        1220, 410, 35, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SSAA, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaScaleDecBtn = CreateWindowA("BUTTON", "-", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1260, 370, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
+        1260, 410, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_DEC, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaScaleIncBtn = CreateWindowA("BUTTON", "+", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1290, 370, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
+        1290, 410, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_SSAA_SCALE_INC, GetModuleHandle(nullptr), nullptr);
     
     m_ssaaStatusLabel = CreateWindowA("STATIC", "OFF", WS_VISIBLE | WS_CHILD,
-        1320, 355, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1320, 395, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Model file controls
     CreateWindowA("STATIC", "Model:", WS_VISIBLE | WS_CHILD,
-        1220, 400, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 440, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_modelFileEdit = CreateWindowA("EDIT", "sphere.obj", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 415, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_MODEL_FILE, GetModuleHandle(nullptr), nullptr);
+        1220, 455, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_MODEL_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadModelBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1345, 415, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_MODEL, GetModuleHandle(nullptr), nullptr);
+        1345, 455, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_MODEL, GetModuleHandle(nullptr), nullptr);
     
     m_modelStatusLabel = CreateWindowA("STATIC", "sphere.obj", WS_VISIBLE | WS_CHILD,
-        1390, 415, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1390, 455, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Texture file controls
     CreateWindowA("STATIC", "Texture:", WS_VISIBLE | WS_CHILD,
-        1220, 440, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 480, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_textureFileEdit = CreateWindowA("EDIT", "texture.bmp", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 455, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_TEXTURE_FILE, GetModuleHandle(nullptr), nullptr);
+        1220, 495, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_TEXTURE_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadTextureBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1345, 455, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_TEXTURE, GetModuleHandle(nullptr), nullptr);
+        1345, 495, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_TEXTURE, GetModuleHandle(nullptr), nullptr);
     
     m_textureStatusLabel = CreateWindowA("STATIC", "texture.bmp", WS_VISIBLE | WS_CHILD,
-        1390, 455, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1390, 495, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Normal map file controls
     CreateWindowA("STATIC", "Normal:", WS_VISIBLE | WS_CHILD,
-        1220, 480, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1220, 520, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     m_normalMapFileEdit = CreateWindowA("EDIT", "normal.bmp", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1220, 495, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_NORMAL_MAP_FILE, GetModuleHandle(nullptr), nullptr);
+        1220, 535, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_NORMAL_MAP_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadNormalMapBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-        1345, 495, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
+        1345, 535, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
     
     m_normalMapStatusLabel = CreateWindowA("STATIC", "normal.bmp", WS_VISIBLE | WS_CHILD,
-        1390, 495, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1390, 535, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Render area
     m_renderArea = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_BITMAP,
@@ -344,44 +368,103 @@ void RenderWindow::CreateControls() {
     
     // BRDF Model controls
     CreateWindowA("STATIC", "BRDF Model:", WS_VISIBLE | WS_CHILD,
-        1220, 520, 80, 15, m_hwnd, NULL, NULL, NULL);
+        1220, 560, 80, 15, m_hwnd, NULL, NULL, NULL);
     
     m_brdfCheckbox = CreateWindowA("BUTTON", "Enable BRDF", 
                                    WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
-                                   1220, 535, 100, 20, m_hwnd, 
+                                   1220, 575, 100, 20, m_hwnd, 
                                    (HMENU)ID_BRDF_ENABLE, NULL, NULL);
     
     // Roughness control
     CreateWindowA("STATIC", "Rough:", WS_VISIBLE | WS_CHILD,
-        1220, 560, 45, 15, m_hwnd, NULL, NULL, NULL);
+        1220, 600, 45, 15, m_hwnd, NULL, NULL, NULL);
     
     m_roughnessEdit = CreateWindowA("EDIT", "0.5", 
                                     WS_VISIBLE | WS_CHILD | WS_BORDER,
-                                    1270, 560, 50, 20, m_hwnd, 
+                                    1270, 600, 50, 20, m_hwnd, 
                                     (HMENU)ID_ROUGHNESS, NULL, NULL);
     
     // Metallic control
     CreateWindowA("STATIC", "Metal:", WS_VISIBLE | WS_CHILD,
-        1330, 560, 40, 15, m_hwnd, NULL, NULL, NULL);
+        1330, 600, 40, 15, m_hwnd, NULL, NULL, NULL);
     
     m_metallicEdit = CreateWindowA("EDIT", "0.0", 
                                    WS_VISIBLE | WS_CHILD | WS_BORDER,
-                                   1375, 560, 50, 20, m_hwnd, 
+                                   1375, 600, 50, 20, m_hwnd, 
                                    (HMENU)ID_METALLIC, NULL, NULL);
     
     // 能量补偿控件
     m_energyCompensationCheckbox = CreateWindowA("BUTTON", "Energy Compensation", 
                                                   WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
-                                                  1220, 585, 140, 20, m_hwnd, 
+                                                  1220, 625, 140, 20, m_hwnd, 
                                                   (HMENU)ID_ENERGY_COMPENSATION_ENABLE, NULL, NULL);
     
     CreateWindowA("STATIC", "EC Scale:", WS_VISIBLE | WS_CHILD,
-        1220, 610, 60, 15, m_hwnd, NULL, NULL, NULL);
+        1220, 650, 60, 15, m_hwnd, NULL, NULL, NULL);
     
     m_energyCompensationScaleEdit = CreateWindowA("EDIT", "1.0", 
                                                    WS_VISIBLE | WS_CHILD | WS_BORDER,
-                                                   1285, 610, 50, 20, m_hwnd, 
+                                                   1285, 650, 50, 20, m_hwnd, 
                                                    (HMENU)ID_ENERGY_COMPENSATION_SCALE, NULL, NULL);
+    
+    // 新增：菲涅尔F0控件
+    CreateWindowA("STATIC", "Fresnel F0 (R,G,B):", WS_VISIBLE | WS_CHILD,
+        1220, 675, 120, 15, m_hwnd, NULL, NULL, NULL);
+    
+    m_f0REdit = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1220, 690, 45, 20, m_hwnd, (HMENU)ID_F0_R, NULL, NULL);
+    
+    m_f0GEdit = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1270, 690, 45, 20, m_hwnd, (HMENU)ID_F0_G, NULL, NULL);
+    
+    m_f0BEdit = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1320, 690, 45, 20, m_hwnd, (HMENU)ID_F0_B, NULL, NULL);
+    
+    // Displacement shader controls
+    int displacementY = 715;
+    m_displacementLabel = CreateWindowA("STATIC", "Displacement Shader", 
+                                     WS_CHILD | WS_VISIBLE,
+                                     1220, displacementY, 150, 15,
+                                     m_hwnd, NULL, NULL, NULL);
+    displacementY += 20;
+    
+    m_toggleDisplacementBtn = CreateWindowA("BUTTON", "Enable Displacement",
+                                         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                         1220, displacementY, 150, 20,
+                                         m_hwnd, (HMENU)ID_TOGGLE_DISPLACEMENT, NULL, NULL);
+    displacementY += 25;
+    
+    CreateWindowA("STATIC", "Scale:", WS_CHILD | WS_VISIBLE,
+                1220, displacementY, 45, 15, m_hwnd, NULL, NULL, NULL);
+    m_displacementScaleEdit = CreateWindowA("EDIT", "0.5",
+                                         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                         1270, displacementY, 45, 20,
+                                         m_hwnd, (HMENU)ID_DISPLACEMENT_SCALE, NULL, NULL);
+    displacementY += 25;
+    
+    CreateWindowA("STATIC", "Frequency:", WS_CHILD | WS_VISIBLE,
+                1220, displacementY, 45, 15, m_hwnd, NULL, NULL, NULL);
+    m_displacementFreqEdit = CreateWindowA("EDIT", "8.0",
+                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                        1270, displacementY, 45, 20,
+                                        m_hwnd, (HMENU)ID_DISPLACEMENT_FREQ, NULL, NULL);
+    displacementY += 25;
+    
+    CreateWindowA("STATIC", "Length:", WS_CHILD | WS_VISIBLE,
+                1220, displacementY, 45, 15, m_hwnd, NULL, NULL, NULL);
+    m_spineLengthEdit = CreateWindowA("EDIT", "0.2",
+                                   WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                   1270, displacementY, 45, 20,
+                                   m_hwnd, (HMENU)ID_SPINE_LENGTH, NULL, NULL);
+    displacementY += 25;
+    
+    CreateWindowA("STATIC", "Sharpness:", WS_CHILD | WS_VISIBLE,
+                1220, displacementY, 45, 15, m_hwnd, NULL, NULL, NULL);
+    m_spineSharpnessEdit = CreateWindowA("EDIT", "2.0",
+                                      WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                      1270, displacementY, 45, 20,
+                                      m_hwnd, (HMENU)ID_SPINE_SHARPNESS, NULL, NULL);
+    displacementY += 25;
 }
 
 void RenderWindow::Run() {
@@ -430,6 +513,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnLightChanged();
             } else if (controlId >= ID_LIGHT2_X && controlId <= ID_LIGHT2_INTENSITY) {
                 OnLight2Changed();
+            } else if (controlId >= ID_DIRLIGHT_X && controlId <= ID_DIRLIGHT_INTENSITY) {
+                OnDirLightChanged();
             } else if (controlId >= ID_DIFFUSE_STRENGTH && controlId <= ID_AMBIENT_STRENGTH) {
                 OnLightingChanged();
             } else if (controlId == ID_SHININESS) {
@@ -439,6 +524,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             } else if (controlId == ID_METALLIC) {
                 OnBRDFParameterChanged();
             } else if (controlId == ID_ENERGY_COMPENSATION_SCALE) {
+                OnBRDFParameterChanged();
+            } else if (controlId >= ID_F0_R && controlId <= ID_F0_B) {
                 OnBRDFParameterChanged();
             }
         } else if (HIWORD(wParam) == BN_CLICKED) {
@@ -477,6 +564,10 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 bool enabled = (SendMessage(m_energyCompensationCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 m_renderer->setEnergyCompensationEnabled(enabled);
                 UpdateRender();
+            } else if (controlId == ID_TOGGLE_DISPLACEMENT || controlId == ID_DISPLACEMENT_SCALE ||
+                       controlId == ID_DISPLACEMENT_FREQ || controlId == ID_SPINE_LENGTH ||
+                       controlId == ID_SPINE_SHARPNESS) {
+                OnDisplacementChanged();
             }
         }
         return 0;
@@ -653,18 +744,27 @@ void RenderWindow::UpdateRender() {
     m_renderer->setViewportMatrix(viewportMatrix);
     
     // 更新多光源系统
-    if (m_renderer->getLightCount() >= 2) {
-        // 更新第一个光源
+    if (m_renderer->getLightCount() >= 3) {
+        // 更新第一个光源（点光源）
         Light& light1 = m_renderer->getLight(0);
+        light1.type = LightType::POINT;
         light1.position = Vec3f(m_lightX, m_lightY, m_lightZ);
         light1.color = Vec3f(1, 1, 1); // 白色
         light1.intensity = m_lightIntensity;
         
-        // 更新第二个光源
+        // 更新第二个光源（点光源）
         Light& light2 = m_renderer->getLight(1);
+        light2.type = LightType::POINT;
         light2.position = Vec3f(m_light2X, m_light2Y, m_light2Z);
         light2.color = Vec3f(0.8, 0.6, 1.0); // 紫色
         light2.intensity = m_light2Intensity;
+        
+        // 更新第三个光源（平面光源）
+        Light& light3 = m_renderer->getLight(2);
+        light3.type = LightType::DIRECTIONAL;
+        light3.position = Vec3f(m_dirLightX, m_dirLightY, m_dirLightZ).normalize(); // 作为方向向量
+        light3.color = Vec3f(1.0, 0.9, 0.8); // 暖白色
+        light3.intensity = m_dirLightIntensity;
     }
     
     m_renderer->setAmbientIntensity(0.3f);
@@ -680,14 +780,8 @@ void RenderWindow::UpdateRender() {
     m_renderer->setMetallic(m_metallic);
     m_renderer->setEnergyCompensationScale(m_energyCompensationScale);
     
-    // 根据材质类型设置 F0
-    if (m_metallic > 0.5f) {
-        // 金属材质使用反照率作为 F0
-        m_renderer->setF0(Vec3f(0.7f, 0.7f, 0.7f));  // 银色金属
-    } else {
-        // 非金属材质使用标准 F0
-        m_renderer->setF0(Vec3f(0.04f, 0.04f, 0.04f));
-    }
+    // 使用用户输入的F0值（如果输入框为空则使用默认值）
+    m_renderer->setF0(Vec3f(m_f0R, m_f0G, m_f0B));
     
     // Clear and render
     m_renderer->clear(Color(50, 50, 100));
@@ -1038,9 +1132,83 @@ void RenderWindow::OnBRDFParameterChanged() {
     GetWindowTextA(m_energyCompensationScaleEdit, buffer, sizeof(buffer));
     m_energyCompensationScale = static_cast<float>(atof(buffer));
     
+    // 读取菲涅尔F0值，如果输入框为空则使用默认值
+    GetWindowTextA(m_f0REdit, buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        m_f0R = static_cast<float>(atof(buffer));
+    } else {
+        m_f0R = 0.04f;  // 默认值
+    }
+    
+    GetWindowTextA(m_f0GEdit, buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        m_f0G = static_cast<float>(atof(buffer));
+    } else {
+        m_f0G = 0.04f;  // 默认值
+    }
+    
+    GetWindowTextA(m_f0BEdit, buffer, sizeof(buffer));
+    if (strlen(buffer) > 0) {
+        m_f0B = static_cast<float>(atof(buffer));
+    } else {
+        m_f0B = 0.04f;  // 默认值
+    }
+    
     m_renderer->setRoughness(m_roughness);
     m_renderer->setMetallic(m_metallic);
     m_renderer->setEnergyCompensationScale(m_energyCompensationScale);
+    m_renderer->setF0(Vec3f(m_f0R, m_f0G, m_f0B));
     
+    UpdateRender();
+}
+
+void RenderWindow::OnDirLightChanged() {
+    // Get directional light values from edit controls
+    char buffer[32];
+    
+    GetWindowTextA(m_dirLightXEdit, buffer, sizeof(buffer));
+    m_dirLightX = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_dirLightYEdit, buffer, sizeof(buffer));
+    m_dirLightY = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_dirLightZEdit, buffer, sizeof(buffer));
+    m_dirLightZ = static_cast<float>(atof(buffer));
+    
+    GetWindowTextA(m_dirLightIntensityEdit, buffer, sizeof(buffer));
+    m_dirLightIntensity = static_cast<float>(atof(buffer));
+    
+    UpdateRender();
+}
+
+void RenderWindow::OnDisplacementChanged() {
+    if (!m_renderer) return;
+    
+    // 获取启用状态
+    bool enabled = SendMessage(m_toggleDisplacementBtn, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    m_renderer->setDisplacementEnabled(enabled);
+    
+    // 获取位移强度
+    char buffer[32];
+    GetWindowTextA(m_displacementScaleEdit, buffer, sizeof(buffer));
+    float scale = std::atof(buffer);
+    m_renderer->setDisplacementScale(scale);
+    
+    // 获取位移频率
+    GetWindowTextA(m_displacementFreqEdit, buffer, sizeof(buffer));
+    float freq = std::atof(buffer);
+    m_renderer->setDisplacementFrequency(freq);
+    
+    // 获取刺长度
+    GetWindowTextA(m_spineLengthEdit, buffer, sizeof(buffer));
+    float length = std::atof(buffer);
+    m_renderer->setSpineLength(length);
+    
+    // 获取刺锐利度
+    GetWindowTextA(m_spineSharpnessEdit, buffer, sizeof(buffer));
+    float sharpness = std::atof(buffer);
+    m_renderer->setSpineSharpness(sharpness);
+    
+    // 更新渲染
     UpdateRender();
 } 

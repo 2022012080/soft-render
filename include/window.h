@@ -54,7 +54,17 @@ public:
     void OnLight2Changed(); // 新增：第二个光源变化处理
     void OnLightingChanged(); // 新增：光照系数变化处理
     void OnBRDFParameterChanged(); // 新增：BRDF参数变化处理
+    void OnDirLightChanged(); // 新增：平面光源变化处理
     void RenderToWindow();
+    
+    // 新增：位移着色器控件
+    HWND m_toggleDisplacementBtn;
+    HWND m_displacementScaleEdit, m_displacementFreqEdit;
+    HWND m_spineLengthEdit, m_spineSharpnessEdit;
+    HWND m_displacementLabel;
+    
+    // 新增：位移着色器控制方法
+    void OnDisplacementChanged();
     
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -72,6 +82,10 @@ private:
     HWND m_lightXEdit, m_lightYEdit, m_lightZEdit, m_lightIntensityEdit;
     HWND m_light2XEdit, m_light2YEdit, m_light2ZEdit, m_light2IntensityEdit; // 第二个光源
     HWND m_cameraLabel, m_rotationLabel, m_cameraRollLabel, m_lightLabel, m_light2Label;
+    
+    // 新增：平面光源控件
+    HWND m_dirLightXEdit, m_dirLightYEdit, m_dirLightZEdit, m_dirLightIntensityEdit;
+    HWND m_dirLightLabel;
     
     // 新增：光照系数控件
     HWND m_diffuseEdit, m_specularEdit, m_ambientEdit;
@@ -135,6 +149,9 @@ private:
     float m_lightX, m_lightY, m_lightZ, m_lightIntensity;
     float m_light2X, m_light2Y, m_light2Z, m_light2Intensity; // 第二个光源设置
     
+    // 新增：平面光源设置
+    float m_dirLightX, m_dirLightY, m_dirLightZ, m_dirLightIntensity;
+    
     // 新增：光照系数设置
     float m_diffuseStrength, m_specularStrength, m_ambientStrength;
     
@@ -144,6 +161,9 @@ private:
     // 新增：BRDF 模型参数
     float m_roughness;     // 粗糙度
     float m_metallic;      // 金属度
+    
+    // 新增：菲涅尔F0参数
+    float m_f0R, m_f0G, m_f0B;  // 菲涅尔F0的RGB值
     
     // 新增：能量补偿参数
     float m_energyCompensationScale;  // 能量补偿强度
@@ -205,6 +225,12 @@ private:
     static const int ID_LIGHT2_Z = 1024;
     static const int ID_LIGHT2_INTENSITY = 1025;
     
+    // 新增：平面光源控制ID
+    static const int ID_DIRLIGHT_X = 1048;
+    static const int ID_DIRLIGHT_Y = 1049;
+    static const int ID_DIRLIGHT_Z = 1050;
+    static const int ID_DIRLIGHT_INTENSITY = 1051;
+    
     // 新增：光照系数控制ID
     static const int ID_DIFFUSE_STRENGTH = 1026;
     static const int ID_SPECULAR_STRENGTH = 1027;
@@ -234,6 +260,9 @@ private:
     HWND m_energyCompensationCheckbox;
     HWND m_energyCompensationScaleEdit;
     
+    // 新增：菲涅尔F0控件
+    HWND m_f0REdit, m_f0GEdit, m_f0BEdit;
+    
     // 新增：BRDF 控制ID
     static const int ID_BRDF_ENABLE = 1040;
     static const int ID_ROUGHNESS = 1041;
@@ -242,4 +271,16 @@ private:
     // 新增：能量补偿控制ID
     static const int ID_ENERGY_COMPENSATION_ENABLE = 1043;
     static const int ID_ENERGY_COMPENSATION_SCALE = 1044;
+    
+    // 新增：菲涅尔F0控制ID
+    static const int ID_F0_R = 1045;
+    static const int ID_F0_G = 1046;
+    static const int ID_F0_B = 1047;
+    
+    // 新增：位移着色器控制ID
+    static const int ID_TOGGLE_DISPLACEMENT = 1050;
+    static const int ID_DISPLACEMENT_SCALE = 1051;
+    static const int ID_DISPLACEMENT_FREQ = 1052;
+    static const int ID_SPINE_LENGTH = 1053;
+    static const int ID_SPINE_SHARPNESS = 1054;
 }; 

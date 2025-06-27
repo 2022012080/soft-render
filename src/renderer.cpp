@@ -24,6 +24,7 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 添加默认光源
     lights.push_back(Light(Vec3f(3, 3, 3), Vec3f(1, 1, 1), 10.0f));  // 白色主光源
     lights.push_back(Light(Vec3f(-3, 2, 1), Vec3f(0.8, 0.6, 1.0), 5.0f));  // 紫色辅助光源
+    lights.push_back(Light(Vec3f(0, -1, 0), Vec3f(1.0, 0.9, 0.8), 5.0f, LightType::DIRECTIONAL));  // 平面光源（向下）
     
     // 初始化绘制控制开关
     m_drawTriangleEdges = false;  // 默认关闭三角形描边
@@ -46,6 +47,13 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     m_enableEnergyCompensation = true;   // 默认启用能量补偿
     m_energyCompensationScale = 1.0f;    // 默认补偿强度
     m_lutInitialized = false;            // 查找表未初始化
+    
+    // 新增：初始化位移着色器参数
+    m_enableDisplacement = false;        // 默认关闭位移着色器
+    m_displacementScale = 0.5f;          // 默认位移强度
+    m_displacementFrequency = 8.0f;      // 默认位移频率
+    m_spineLength = 0.2f;                // 默认刺长度
+    m_spineSharpness = 2.0f;             // 默认刺锐利度
     
     // 初始化法向量变换矩阵
     updateNormalMatrix();
@@ -351,24 +359,33 @@ void Renderer::renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& 
 }
 
 Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
-    ShaderVertex result;
+    ShaderVertex sv;
     
-    Vec3f worldPos = modelMatrix * vertex.position;
-    Vec3f viewPos = viewMatrix * worldPos;
+    // 保存本地坐标信息
+    sv.localPos = vertex.position;
+    sv.localNormal = vertex.normal;
+    
+    // 应用位移
+    Vec3f displacedPosition = vertex.position;
+    if (m_enableDisplacement) {
+        Vec3f displacement = calculateSeaUrchinDisplacement(vertex.position, vertex.normal);
+        displacedPosition = displacedPosition + displacement;
+        
+        // 更新法线（简化处理，实际应用中可能需要更复杂的法线计算）
+        sv.localNormal = (vertex.normal + displacement.normalize() * 0.5f).normalize();
+    }
+    
+    // 应用变换
+    sv.worldPos = modelMatrix * displacedPosition;
+    Vec3f viewPos = viewMatrix * sv.worldPos;
     Vec3f clipPos = projectionMatrix * viewPos;
-    Vec3f screenPos = viewportMatrix * clipPos;
+    sv.position = viewportMatrix * clipPos;
     
     // 变换法向量 - 使用法向量变换矩阵
-    Vec3f transformedNormal = normalMatrix * vertex.normal;
+    sv.normal = (normalMatrix * Vec4f(sv.localNormal, 0.0f)).xyz().normalize();
+    sv.texCoord = vertex.texCoord;
     
-    result.position = screenPos;
-    result.normal = transformedNormal.normalize();
-    result.texCoord = vertex.texCoord;
-    result.worldPos = worldPos;
-    result.localPos = vertex.position;        // 新增：保存本地坐标位置
-    result.localNormal = vertex.normal;       // 新增：保存本地坐标法向量
-    
-    return result;
+    return sv;
 }
 
 Color Renderer::fragmentShader(const ShaderFragment& fragment) {
@@ -521,14 +538,23 @@ Vec3f Renderer::calculateLighting(const Vec3f& localPos, const Vec3f& localNorma
 }
 
 Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
-    // 在本地坐标系中计算光照（光源位置和表面位置都是本地坐标）
-    Vec3f lightVector = light.position - localPos;
-    float distance = lightVector.length();
-    Vec3f lightDir = lightVector.normalize();
+    Vec3f lightDir;
+    float attenuation;
     
-    // 计算标准距离衰减（I/r²）
-    float r_squared = distance * distance;
-    float attenuation = light.intensity / r_squared;
+    if (light.type == LightType::DIRECTIONAL) {
+        // 平面光源：使用固定方向，无距离衰减
+        lightDir = -light.position.normalize();  // 光源position作为方向向量，取反得到光照方向
+        attenuation = light.intensity;  // 平面光源无距离衰减
+    } else {
+        // 点光源：原有逻辑
+        Vec3f lightVector = light.position - localPos;
+        float distance = lightVector.length();
+        lightDir = lightVector.normalize();
+        
+        // 计算标准距离衰减（I/r²）
+        float r_squared = distance * distance;
+        attenuation = light.intensity / r_squared;
+    }
     
     // 漫反射光照（Lambert模型） - 使用本地坐标系的法向量
     float diffuseIntensity = std::max(0.0f, localNormal.dot(lightDir));
@@ -1148,10 +1174,19 @@ Vec3f Renderer::calculateBRDFLighting(const Vec3f& localPos, const Vec3f& localN
 }
 
 Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
-    // 在本地坐标系中计算光照
-    Vec3f lightVector = light.position - localPos;
-    float distance = lightVector.length();
-    Vec3f L = lightVector.normalize();  // 光照方向
+    Vec3f L;  // 光照方向
+    float distance;
+    
+    if (light.type == LightType::DIRECTIONAL) {
+        // 平面光源：使用固定方向
+        L = -light.position.normalize();  // 光源position作为方向向量，取反得到光照方向
+        distance = 1.0f;  // 平面光源无距离概念，设为1避免除零
+    } else {
+        // 点光源：原有逻辑
+        Vec3f lightVector = light.position - localPos;
+        distance = lightVector.length();
+        L = lightVector.normalize();  // 光照方向
+    }
     Vec3f N = localNormal.normalize();  // 法线方向
     
     // 计算视角方向
@@ -1174,7 +1209,12 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
     }
     
     // 距离衰减
-    float attenuation = light.intensity / (distance * distance);
+    float attenuation;
+    if (light.type == LightType::DIRECTIONAL) {
+        attenuation = light.intensity;  // 平面光源无距离衰减
+    } else {
+        attenuation = light.intensity / (distance * distance);  // 点光源距离衰减
+    }
     
     // Cook-Torrance BRDF 计算
     float D = distributionGGX(N, H, m_roughness);           // 法线分布函数
@@ -1267,8 +1307,8 @@ void Renderer::initializeEnergyCompensationLUT() const {
             float cosTheta = static_cast<float>(cosThetaIdx) / (LUT_SIZE - 1);
             
             // 防止除零
-            roughness = std::max(0.01f, roughness);
-            cosTheta = std::max(0.01f, cosTheta);
+            roughness = std::max(0.001f, roughness);
+            cosTheta = std::max(0.001f, cosTheta);
             
             // 计算能量积分
             m_energyCompensationLUT[roughnessIdx][cosThetaIdx] = computeEnergyIntegral(roughness, cosTheta);
@@ -1284,8 +1324,8 @@ float Renderer::lookupEnergyCompensation(float roughness, float cosTheta) const 
     initializeEnergyCompensationLUT();
     
     // 将输入值映射到查找表索引
-    roughness = std::max(0.01f, std::min(1.0f, roughness));
-    cosTheta = std::max(0.01f, std::min(1.0f, cosTheta));
+    roughness = std::max(0.001f, std::min(1.0f, roughness));
+    cosTheta = std::max(0.001f, std::min(1.0f, cosTheta));
     
     float roughnessFloat = roughness * (LUT_SIZE - 1);
     float cosThetaFloat = cosTheta * (LUT_SIZE - 1);
@@ -1395,3 +1435,32 @@ Vec3f Renderer::calculateEnergyCompensationTerm(const Vec3f& N, const Vec3f& V, 
     
     return energyCompensation;
 }
+
+// 新增：计算海胆刺位移
+Vec3f Renderer::calculateSeaUrchinDisplacement(const Vec3f& position, const Vec3f& normal) const {
+    if (!m_enableDisplacement) {
+        return Vec3f(0, 0, 0);
+    }
+    
+    // 使用球面坐标作为基础
+    float theta = std::atan2(position.y, position.x);
+    float phi = std::acos(position.z / position.length());
+    
+    // 生成噪声模式
+    float noise = std::sin(theta * m_displacementFrequency) * 
+                 std::cos(phi * m_displacementFrequency);
+    
+    // 添加更多细节
+    noise += 0.5f * std::sin(theta * m_displacementFrequency * 2.0f) * 
+             std::cos(phi * m_displacementFrequency * 2.0f);
+    
+    // 应用锐利度
+    noise = std::pow(std::abs(noise), m_spineSharpness) * (noise >= 0 ? 1 : -1);
+    
+    // 计算位移量
+    float displacement = noise * m_displacementScale * m_spineLength;
+    
+    // 沿法线方向位移
+    return normal * displacement;
+}
+

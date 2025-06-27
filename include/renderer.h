@@ -14,16 +14,23 @@ struct Pixel {
     Pixel(const Color& c, float d) : color(c), depth(d) {}
 };
 
+// 光源类型枚举
+enum class LightType {
+    POINT,      // 点光源
+    DIRECTIONAL // 平面光源（方向光）
+};
+
 // 光源结构体
 struct Light {
-    Vec3f position;
+    LightType type;
+    Vec3f position;     // 对于点光源是位置，对于平面光源是方向
     Vec3f color;
     float intensity;
     bool enabled;
     
-    Light() : position(0, 0, 0), color(1, 1, 1), intensity(1.0f), enabled(true) {}
-    Light(const Vec3f& pos, const Vec3f& col, float intens) 
-        : position(pos), color(col), intensity(intens), enabled(true) {}
+    Light() : type(LightType::POINT), position(0, 0, 0), color(1, 1, 1), intensity(1.0f), enabled(true) {}
+    Light(const Vec3f& pos, const Vec3f& col, float intens, LightType lightType = LightType::POINT) 
+        : type(lightType), position(pos), color(col), intensity(intens), enabled(true) {}
 };
 
 // 渲染器类
@@ -88,6 +95,16 @@ private:
     mutable std::vector<std::vector<float>> m_energyCompensationLUT;
     mutable bool m_lutInitialized;
     static constexpr int LUT_SIZE = 64;  // 查找表分辨率
+    
+    // 新增：位移着色器参数
+    bool m_enableDisplacement;     // 位移着色器开关
+    float m_displacementScale;     // 位移强度
+    float m_displacementFrequency; // 位移频率
+    float m_spineLength;          // 刺的长度
+    float m_spineSharpness;       // 刺的锐利度
+    
+    // 新增：计算海胆刺位移
+    Vec3f calculateSeaUrchinDisplacement(const Vec3f& position, const Vec3f& normal) const;
     
 public:
     Renderer(int w, int h);
@@ -168,6 +185,18 @@ public:
     bool isEnergyCompensationEnabled() const { return m_enableEnergyCompensation; }
     void setEnergyCompensationScale(float scale) { m_energyCompensationScale = std::max(0.0f, std::min(2.0f, scale)); }
     float getEnergyCompensationScale() const { return m_energyCompensationScale; }
+    
+    // 新增：位移着色器控制方法
+    void setDisplacementEnabled(bool enabled) { m_enableDisplacement = enabled; }
+    bool isDisplacementEnabled() const { return m_enableDisplacement; }
+    void setDisplacementScale(float scale) { m_displacementScale = scale; }
+    void setDisplacementFrequency(float freq) { m_displacementFrequency = freq; }
+    void setSpineLength(float length) { m_spineLength = length; }
+    void setSpineSharpness(float sharpness) { m_spineSharpness = sharpness; }
+    float getDisplacementScale() const { return m_displacementScale; }
+    float getDisplacementFrequency() const { return m_displacementFrequency; }
+    float getSpineLength() const { return m_spineLength; }
+    float getSpineSharpness() const { return m_spineSharpness; }
     
     // 渲染模型
     void renderModel(const Model& model);

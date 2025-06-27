@@ -36,6 +36,7 @@ struct Vec3f {
     
     Vec3f operator+(const Vec3f& v) const { return Vec3f(x + v.x, y + v.y, z + v.z); }
     Vec3f operator-(const Vec3f& v) const { return Vec3f(x - v.x, y - v.y, z - v.z); }
+    Vec3f operator-() const { return Vec3f(-x, -y, -z); }  // 一元负号运算符
     Vec3f operator*(float f) const { return Vec3f(x * f, y * f, z * f); }
     Vec3f operator*(const Vec3f& v) const { return Vec3f(x * v.x, y * v.y, z * v.z); }
     Vec3f operator/(float f) const { return Vec3f(x / f, y / f, z / f); }
@@ -54,6 +55,27 @@ struct Vec3f {
     Vec3f cross(const Vec3f& v) const {
         return Vec3f(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
     }
+};
+
+// 4D向量
+struct Vec4f {
+    float x, y, z, w;
+    
+    Vec4f() : x(0), y(0), z(0), w(1) {}
+    Vec4f(float x, float y, float z, float w = 1.0f) : x(x), y(y), z(z), w(w) {}
+    Vec4f(const Vec3f& v, float w = 1.0f) : x(v.x), y(v.y), z(v.z), w(w) {}
+    
+    Vec4f operator+(const Vec4f& v) const { return Vec4f(x + v.x, y + v.y, z + v.z, w + v.w); }
+    Vec4f operator-(const Vec4f& v) const { return Vec4f(x - v.x, y - v.y, z - v.z, w - v.w); }
+    Vec4f operator*(float f) const { return Vec4f(x * f, y * f, z * f, w * f); }
+    Vec4f operator/(float f) const { return Vec4f(x / f, y / f, z / f, w / f); }
+    
+    float norm() const { return std::sqrt(x * x + y * y + z * z + w * w); }
+    Vec4f normalize() const { float n = norm(); return n > 0 ? *this / n : Vec4f(0, 0, 0, 0); }
+    
+    float dot(const Vec4f& v) const { return x * v.x + y * v.y + z * v.z + w * v.w; }
+    
+    Vec3f xyz() const { return Vec3f(x, y, z); }
 };
 
 // 4x4矩阵
@@ -91,6 +113,16 @@ struct Matrix4x4 {
             (m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3]) / w,
             (m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3]) / w,
             (m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3]) / w
+        );
+    }
+    
+    // 新增：矩阵与Vec4f相乘
+    Vec4f operator*(const Vec4f& v) const {
+        return Vec4f(
+            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z + m[0][3] * v.w,
+            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z + m[1][3] * v.w,
+            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z + m[2][3] * v.w,
+            m[3][0] * v.x + m[3][1] * v.y + m[3][2] * v.z + m[3][3] * v.w
         );
     }
 };
