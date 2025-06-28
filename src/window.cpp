@@ -20,7 +20,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_shininess(128.0f) // 新增：高光指数初始化
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
-    , m_currentModelFile("sphere.obj") // 默认模型文件
+    , m_currentModelFile("Untitled.obj") // 设置初始模型文件
     , m_currentTextureFile("texture.bmp") // 默认纹理文件
     , m_currentNormalMapFile("normal.bmp") // 默认法线贴图文件
     , m_roughness(0.5f)        // 新增：粗糙度初始化
@@ -161,6 +161,32 @@ bool RenderWindow::Initialize() {
     // 设置能量补偿复选框的默认状态为选中
     SendMessage(m_energyCompensationCheckbox, BM_SETCHECK, BST_CHECKED, 0);
     
+    // 设置BRDF的初始状态
+    m_renderer->setBRDFEnabled(true);
+    
+    // 设置BRDF参数的初始值
+    m_roughness = 0.6f;
+    m_metallic = 1.0f;
+    m_f0R = 1.0f;
+    m_f0G = 0.3f;
+    m_f0B = 0.6f;
+    
+    // 更新编辑框显示
+    SetWindowTextA(m_roughnessEdit, "0.6");
+    SetWindowTextA(m_metallicEdit, "1.0");
+    SetWindowTextA(m_f0REdit, "1.0");
+    SetWindowTextA(m_f0GEdit, "0.3");
+    SetWindowTextA(m_f0BEdit, "0.6");
+    
+    // 更新渲染器参数
+    m_renderer->setRoughness(m_roughness);
+    m_renderer->setMetallic(m_metallic);
+    m_renderer->setF0(Vec3f(m_f0R, m_f0G, m_f0B));
+    
+    // 设置初始模型文件
+    m_currentModelFile = "Untitled.obj";
+    OnLoadModel();
+    
     // Initial render
     UpdateRender();
     
@@ -177,14 +203,14 @@ void RenderWindow::CreateControls() {
     CreateWindowA("STATIC", "Obj Pos (X,Y,Z):", WS_VISIBLE | WS_CHILD,
         1220, 10, 120, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_objectXEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+    m_objectXEdit = CreateWindowA("EDIT", "-0.2", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1220, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_X, GetModuleHandle(nullptr), nullptr);
     
-    m_objectYEdit = CreateWindowA("EDIT", "0.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1270, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Y, GetModuleHandle(nullptr), nullptr);
+    m_objectZEdit = CreateWindowA("EDIT", "-2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1270, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Z, GetModuleHandle(nullptr), nullptr);
     
-    m_objectZEdit = CreateWindowA("EDIT", "-5.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
-        1320, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Z, GetModuleHandle(nullptr), nullptr);
+    m_objectYEdit = CreateWindowA("EDIT", "0.08", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1320, 25, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_OBJECT_Y, GetModuleHandle(nullptr), nullptr);
     
     // Rotation controls
     CreateWindowA("STATIC", "Rotation (X,Y,Z):", WS_VISIBLE | WS_CHILD,
@@ -349,13 +375,13 @@ void RenderWindow::CreateControls() {
     CreateWindowA("STATIC", "Model:", WS_VISIBLE | WS_CHILD,
         1220, 440, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_modelFileEdit = CreateWindowA("EDIT", "sphere.obj", WS_VISIBLE | WS_CHILD | WS_BORDER,
+    m_modelFileEdit = CreateWindowA("EDIT", "Untitled.obj", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1220, 455, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_MODEL_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadModelBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1345, 455, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_MODEL, GetModuleHandle(nullptr), nullptr);
     
-    m_modelStatusLabel = CreateWindowA("STATIC", "sphere.obj", WS_VISIBLE | WS_CHILD,
+    m_modelStatusLabel = CreateWindowA("STATIC", "Untitled.obj", WS_VISIBLE | WS_CHILD,
         1390, 455, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Texture file controls
@@ -396,6 +422,9 @@ void RenderWindow::CreateControls() {
                                    WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
                                    1220, 575, 100, 20, m_hwnd, 
                                    (HMENU)ID_BRDF_ENABLE, NULL, NULL);
+    
+    // 设置BRDF复选框的默认状态为选中
+    SendMessage(m_brdfCheckbox, BM_SETCHECK, BST_CHECKED, 0);
     
     // Roughness control
     CreateWindowA("STATIC", "Rough:", WS_VISIBLE | WS_CHILD,
@@ -616,15 +645,29 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(m_hwnd, &ps);
         
-        // Get the render area position
-        RECT renderRect;
-        GetWindowRect(m_renderArea, &renderRect);
-        POINT pt = {renderRect.left, renderRect.top};
-        ScreenToClient(m_hwnd, &pt);
-        
-        // Blit the rendered image directly to the main window at render area position
-        BitBlt(hdc, pt.x, pt.y, m_renderWidth, m_renderHeight,
-               m_memDC, 0, 0, SRCCOPY);
+        // 只重绘需要更新的区域
+        if (m_memDC && m_bitmap) {
+            RECT updateRect = ps.rcPaint;
+            RECT renderRect;
+            GetWindowRect(m_renderArea, &renderRect);
+            POINT pt = {renderRect.left, renderRect.top};
+            ScreenToClient(m_hwnd, &pt);
+            
+            // 计算渲染区域和更新区域的交集
+            RECT intersection;
+            RECT renderClientRect = {pt.x, pt.y, pt.x + m_renderWidth, pt.y + m_renderHeight};
+            if (IntersectRect(&intersection, &updateRect, &renderClientRect)) {
+                // 只复制需要更新的部分
+                BitBlt(hdc, 
+                       intersection.left, intersection.top,
+                       intersection.right - intersection.left,
+                       intersection.bottom - intersection.top,
+                       m_memDC,
+                       intersection.left - pt.x,
+                       intersection.top - pt.y,
+                       SRCCOPY);
+            }
+        }
         
         EndPaint(m_hwnd, &ps);
         return 0;
@@ -836,7 +879,8 @@ void RenderWindow::UpdateRender() {
     m_cameraPos = m_cameraPos + (m_cameraTargetPos - m_cameraPos) * m_cameraMoveSpeed;
     
     // --- 视图矩阵 ---
-    Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(m_objectX, m_objectY, m_objectZ)) * 
+    Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(m_objectX, m_objectY, m_objectZ)) *
+                           VectorMath::rotate(90.0f, Vec3f(1, 0, 0)) * // 默认加90度
                            VectorMath::rotate(m_rotationZ, Vec3f(0, 0, 1)) *
                            VectorMath::rotate(m_rotationY, Vec3f(0, 1, 0)) *
                            VectorMath::rotate(m_rotationX, Vec3f(1, 0, 0)) *
@@ -956,7 +1000,12 @@ void RenderWindow::UpdateRender() {
 }
 
 void RenderWindow::RenderToWindow() {
-    // Copy renderer's color buffer to the DIB
+    // 创建一个临时的DC和位图用于双缓冲
+    HDC tempDC = CreateCompatibleDC(m_memDC);
+    HBITMAP tempBitmap = CreateCompatibleBitmap(m_memDC, m_renderWidth, m_renderHeight);
+    HBITMAP oldBitmap = (HBITMAP)SelectObject(tempDC, tempBitmap);
+    
+    // Copy renderer's color buffer to the temporary DIB
     const auto& colorBuffer = m_renderer->getColorBuffer();
     
     if (m_bitmapData && !colorBuffer.empty()) {
@@ -972,11 +1021,34 @@ void RenderWindow::RenderToWindow() {
                 }
             }
         }
+        
+        // 将像素数据复制到临时位图
+        BitBlt(tempDC, 0, 0, m_renderWidth, m_renderHeight, m_memDC, 0, 0, SRCCOPY);
     }
     
-    // Trigger repaint of the main window to refresh the render area
-    InvalidateRect(m_hwnd, nullptr, FALSE);
-    UpdateWindow(m_hwnd);
+    // 获取渲染区域的位置
+    RECT renderRect;
+    GetWindowRect(m_renderArea, &renderRect);
+    POINT pt = {renderRect.left, renderRect.top};
+    ScreenToClient(m_hwnd, &pt);
+    
+    // 获取DC并一次性将临时缓冲区的内容复制到窗口
+    HDC hdc = GetDC(m_hwnd);
+    BitBlt(hdc, pt.x, pt.y, m_renderWidth, m_renderHeight, tempDC, 0, 0, SRCCOPY);
+    ReleaseDC(m_hwnd, hdc);
+    
+    // 清理临时对象
+    SelectObject(tempDC, oldBitmap);
+    DeleteObject(tempBitmap);
+    DeleteDC(tempDC);
+    
+    // 只在真正需要重绘时才触发重绘
+    static DWORD lastUpdate = 0;
+    DWORD currentTime = GetTickCount();
+    if (currentTime - lastUpdate > 16) { // 限制刷新率约为60fps
+        lastUpdate = currentTime;
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
 }
 
 // FOV控制方法实现
@@ -1373,30 +1445,30 @@ void RenderWindow::UpdateMovement() {
         Vec3f currentTarget(m_targetPosition.x, m_targetPosition.y, m_targetPosition.z);
         m_isMoving = true;
 
-        if (m_keyStates['W']) {
+    if (m_keyStates['W']) {
             if (m_keyStates[VK_SPACE]) {
                 currentTarget.y += moveStep;
-            } else {
+        } else {
                 currentTarget.x -= forward.x * moveStep;
                 currentTarget.y -= forward.y * moveStep;
                 currentTarget.z -= forward.z * moveStep;
-            }
         }
-        if (m_keyStates['S']) {
+    }
+    if (m_keyStates['S']) {
             if (m_keyStates[VK_SPACE]) {
                 currentTarget.y -= moveStep;
-            } else {
+        } else {
                 currentTarget.x += forward.x * moveStep;
                 currentTarget.y += forward.y * moveStep;
                 currentTarget.z += forward.z * moveStep;
-            }
         }
-        if (m_keyStates['A']) {
+    }
+    if (m_keyStates['A']) {
             currentTarget.x += right.x * moveStep;
             currentTarget.y += right.y * moveStep;
             currentTarget.z += right.z * moveStep;
-        }
-        if (m_keyStates['D']) {
+    }
+    if (m_keyStates['D']) {
             currentTarget.x -= right.x * moveStep;
             currentTarget.y -= right.y * moveStep;
             currentTarget.z -= right.z * moveStep;

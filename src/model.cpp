@@ -89,12 +89,16 @@ void Model::processVertices() {
             
             // 设置位置
             if (face.vertices[i] >= 0 && face.vertices[i] < vertices.size()) {
-                vertex.position = vertices[face.vertices[i]];
+                Vec3f pos = vertices[face.vertices[i]];
+                float tmp = pos.y; pos.y = pos.z; pos.z = tmp; // 交换y和z
+                vertex.position = pos;
             }
             
             // 设置法向量
             if (face.normals[i] >= 0 && face.normals[i] < normals.size()) {
-                vertex.normal = normals[face.normals[i]];
+                Vec3f n = normals[face.normals[i]];
+                float tmp = n.y; n.y = n.z; n.z = tmp; // 交换y和z
+                vertex.normal = n;
             } else {
                 // 如果没有法向量，计算面法向量
                 Vec3f v0 = vertices[face.vertices[0]];
@@ -102,7 +106,9 @@ void Model::processVertices() {
                 Vec3f v2 = vertices[face.vertices[2]];
                 Vec3f edge1 = v1 - v0;
                 Vec3f edge2 = v2 - v0;
-                vertex.normal = edge1.cross(edge2).normalize();
+                Vec3f n = -(edge1.cross(edge2).normalize());
+                float tmp = n.y; n.y = n.z; n.z = tmp; // 交换y和z
+                vertex.normal = n;
             }
             
             // 设置纹理坐标

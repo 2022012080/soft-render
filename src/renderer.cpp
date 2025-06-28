@@ -907,88 +907,93 @@ void Renderer::drawLineHighRes(const Vec3f& start, const Vec3f& end, const Color
 }
 
 // 绘制坐标轴
-void Renderer::drawAxes(float length) {
+void Renderer::drawAxes(float maxLength) {
+    maxLength = 30.0f;
     Vec3f origin(0, 0, 0);
-    
-    // 根据SSAA状态选择合适的绘制函数
-    if (m_enableSSAA) {
-        // 在SSAA模式下，使用高分辨率绘制函数
-        // X轴 - 红色
-        Vec3f xEnd(length, 0, 0);
-        drawLineHighRes(origin, xEnd, Color(255, 0, 0), 2.0f * m_ssaaScale);
+    int screenW = m_enableSSAA ? m_highResWidth : width;
+    int screenH = m_enableSSAA ? m_highResHeight : height;
+    Matrix4x4 vpMat = m_enableSSAA ? createHighResViewportMatrix() : viewportMatrix;
+
+    // 计算原点在屏幕空间的位置
+    Vec3f worldOrigin = modelMatrix * origin;
+    Vec3f viewOrigin = viewMatrix * worldOrigin;
+    Vec3f clipOrigin = projectionMatrix * viewOrigin;
+    Vec3f screenOrigin = vpMat * clipOrigin;
+
+    // 对每个轴进行处理
+    for (int axis = 0; axis < 3; axis++) {
+        Vec3f direction(0, 0, 0);
+        Color axisColor;
         
-        // Y轴 - 绿色
-        Vec3f yEnd(0, length, 0);
-        drawLineHighRes(origin, yEnd, Color(0, 255, 0), 2.0f * m_ssaaScale);
-        
-        // Z轴 - 蓝色
-        Vec3f zEnd(0, 0, length);
-        drawLineHighRes(origin, zEnd, Color(0, 0, 255), 2.0f * m_ssaaScale);
-        
-        // 在原点绘制一个小球表示原点（使用高分辨率）
-        Vec3f worldOrigin = modelMatrix * origin;
-        Vec3f viewOrigin = viewMatrix * worldOrigin;
-        Vec3f clipOrigin = projectionMatrix * viewOrigin;
-        
-        // 使用高分辨率视口矩阵
-        Matrix4x4 highResViewport = createHighResViewportMatrix();
-        Vec3f screenOrigin = highResViewport * clipOrigin;
-        
-        int ox = static_cast<int>(screenOrigin.x);
-        int oy = static_cast<int>(screenOrigin.y);
-        float oz = screenOrigin.z;
-        
-        // 绘制原点标记（小圆圈）- 按比例调整大小
-        int radius = 3 * m_ssaaScale;
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dy = -radius; dy <= radius; dy++) {
-                if (dx * dx + dy * dy <= radius * radius) {
-                    int px = ox + dx;
-                    int py = oy + dy;
-                    if (px >= 0 && px < m_highResWidth && py >= 0 && py < m_highResHeight) {
-                        if (depthTestHighRes(px, py, oz)) {
-                            setPixelHighRes(px, py, Color(255, 255, 255), oz);
-                        }
-                    }
-                }
-            }
+        // 设置轴的方向和颜色
+        switch(axis) {
+            case 0: // X轴
+                direction = Vec3f(1, 0, 0);
+                axisColor = Color(255, 0, 0);
+                break;
+            case 1: // Z轴
+                direction = Vec3f(0, 1, 0);
+                axisColor = Color(0, 255, 0);
+                break;
+            case 2: // Y轴
+                direction = Vec3f(0, 0, 1);
+                axisColor = Color(0, 0, 255);
+                break;
         }
-    } else {
-        // 普通模式下，使用普通绘制函数
-        // X轴 - 红色
-        Vec3f xEnd(length, 0, 0);
-        drawLine(origin, xEnd, Color(255, 0, 0), 2.0f);
-        
-        // Y轴 - 绿色
-        Vec3f yEnd(0, length, 0);
-        drawLine(origin, yEnd, Color(0, 255, 0), 2.0f);
-        
-        // Z轴 - 蓝色
-        Vec3f zEnd(0, 0, length);
-        drawLine(origin, zEnd, Color(0, 0, 255), 2.0f);
-        
-        // 在原点绘制一个小球表示原点
-        Vec3f worldOrigin = modelMatrix * origin;
-        Vec3f viewOrigin = viewMatrix * worldOrigin;
-        Vec3f clipOrigin = projectionMatrix * viewOrigin;
-        Vec3f screenOrigin = viewportMatrix * clipOrigin;
-        
-        int ox = static_cast<int>(screenOrigin.x);
-        int oy = static_cast<int>(screenOrigin.y);
-        float oz = screenOrigin.z;
-        
-        // 绘制原点标记（小圆圈）
-        for (int dx = -3; dx <= 3; dx++) {
-            for (int dy = -3; dy <= 3; dy++) {
-                if (dx * dx + dy * dy <= 9) { // 半径为3的圆
-                    int px = ox + dx;
-                    int py = oy + dy;
-                    if (px >= 0 && px < this->width && py >= 0 && py < this->height) {
-                        if (depthTest(px, py, oz)) {
-                            setPixel(px, py, Color(255, 255, 255), oz);
+
+        // 在两个方向上延伸轴线
+        for (int sign = -1; sign <= 1; sign += 2) {
+            float currentLength = 0;
+            bool foundStart = false;
+            Vec3f startPoint = origin;
+            Vec3f lastValidPoint = origin;
+            bool wasInScreen = false;
+            
+            // 以较小的步长搜索可见部分
+            while (true) {
+                Vec3f endPoint = origin + direction * (currentLength * sign);
+                Vec3f worldEnd = modelMatrix * endPoint;
+                Vec3f viewEnd = viewMatrix * worldEnd;
+                Vec3f clipEnd = projectionMatrix * viewEnd;
+                Vec3f screenEnd = vpMat * clipEnd;
+
+                // 检查点是否在屏幕内
+                bool inScreen = screenEnd.x >= 0 && screenEnd.x < screenW && 
+                              screenEnd.y >= 0 && screenEnd.y < screenH;
+
+                if (inScreen) {
+                    if (!foundStart) {
+                        // 找到起始点
+                        startPoint = endPoint;
+                        foundStart = true;
+                    }
+                    lastValidPoint = endPoint;
+                    wasInScreen = true;
+                }
+                else if (wasInScreen) {
+                    // 找到结束点，绘制这段轴线
+                    if (m_enableSSAA) {
+                        drawLineHighRes(startPoint, lastValidPoint, axisColor, 2.0f * m_ssaaScale);
+                    } else {
+                        drawLine(startPoint, lastValidPoint, axisColor, 2.0f);
+                    }
+                    break;
+                }
+                
+                // 如果已经搜索了很远的距离还没找到屏幕边界，就停止搜索
+                if (currentLength > 1000.0f) {
+                    if (wasInScreen) {
+                        // 如果之前找到过屏幕内的点，绘制到最后一个有效点
+                        if (m_enableSSAA) {
+                            drawLineHighRes(startPoint, lastValidPoint, axisColor, 2.0f * m_ssaaScale);
+                        } else {
+                            drawLine(startPoint, lastValidPoint, axisColor, 2.0f);
                         }
                     }
+                    break;
                 }
+                
+                currentLength += 0.01f; // 使用更大的步长以提高性能
             }
         }
     }
@@ -996,43 +1001,142 @@ void Renderer::drawAxes(float length) {
 
 // 绘制网格
 void Renderer::drawGrid(float size, int divisions) {
-    float step = size / divisions;
+    int screenW = m_enableSSAA ? m_highResWidth : width;
+    int screenH = m_enableSSAA ? m_highResHeight : height;
+    Matrix4x4 vpMat = m_enableSSAA ? createHighResViewportMatrix() : viewportMatrix;
     Color gridColor(128, 128, 128, 128); // 半透明灰色
-    
-    // 根据SSAA状态选择合适的绘制函数
-    if (m_enableSSAA) {
-        // 在SSAA模式下，使用高分辨率绘制函数
-        // 绘制平行于X轴的线（在XY平面上）
-        for (int i = -divisions; i <= divisions; i++) {
-            float z = i * step;
-            Vec3f start(-size, 0, z);
-            Vec3f end(size, 0, z);
-            drawLineHighRes(start, end, gridColor, 1.0f * m_ssaaScale);
-        }
-        
-        // 绘制平行于Z轴的线（在XY平面上）
-        for (int i = -divisions; i <= divisions; i++) {
-            float x = i * step;
-            Vec3f start(x, 0, -size);
-            Vec3f end(x, 0, size);
-            drawLineHighRes(start, end, gridColor, 1.0f * m_ssaaScale);
-        }
-    } else {
-        // 普通模式下，使用普通绘制函数
-        // 绘制平行于X轴的线（在XY平面上）
-        for (int i = -divisions; i <= divisions; i++) {
-            float z = i * step;
-            Vec3f start(-size, 0, z);
-            Vec3f end(size, 0, z);
-            drawLine(start, end, gridColor, 1.0f);
-        }
-        
-        // 绘制平行于Z轴的线（在XY平面上）
-        for (int i = -divisions; i <= divisions; i++) {
-            float x = i * step;
-            Vec3f start(x, 0, -size);
-            Vec3f end(x, 0, size);
-            drawLine(start, end, gridColor, 1.0f);
+
+    // 在X方向和Z方向上绘制网格线
+    for (int dir = 0; dir < 2; dir++) {
+        Vec3f direction = (dir == 0) ? Vec3f(1, 0, 0) : Vec3f(0, 1, 0); // X方向或Z方向
+        Vec3f perpDirection = (dir == 0) ? Vec3f(0, 1, 0) : Vec3f(1, 0, 0); // 垂直于当前方向
+
+        // 对每条网格线
+        for (int i = -30; i <= 30; i++) {
+            Vec3f lineBase = perpDirection * static_cast<float>(i);
+
+            // 在两个方向上延伸网格线
+            float currentLength = 0;
+            bool foundStart = false;
+            Vec3f startPoint = lineBase;
+            Vec3f lastValidPoint = lineBase;
+            bool wasInScreen = false;
+            bool hasDrawn = false;
+            Vec3f lastPoint = lineBase;
+
+            // 向一个方向搜索
+            while (true) {
+                Vec3f endPoint = lineBase + direction * currentLength;
+                Vec3f worldEnd = modelMatrix * endPoint;
+                Vec3f viewEnd = viewMatrix * worldEnd;
+                Vec3f clipEnd = projectionMatrix * viewEnd;
+                Vec3f screenEnd = vpMat * clipEnd;
+
+                bool inScreen = screenEnd.x >= 0 && screenEnd.x < screenW && 
+                              screenEnd.y >= 0 && screenEnd.y < screenH;
+
+                if (inScreen) {
+                    if (!foundStart) {
+                        // 如果这是第一个可见点，且之前有不可见点，绘制到这个点
+                        if (currentLength > 0) {
+                            startPoint = lastPoint;
+                            if (m_enableSSAA) {
+                                drawLineHighRes(startPoint, endPoint, gridColor, 1.0f * m_ssaaScale);
+                            } else {
+                                drawLine(startPoint, endPoint, gridColor, 1.0f);
+                            }
+                        }
+                        foundStart = true;
+                    }
+                    lastValidPoint = endPoint;
+                    wasInScreen = true;
+                }
+                else if (wasInScreen && !hasDrawn) {
+                    // 找到结束点，绘制这段网格线
+                    if (m_enableSSAA) {
+                        drawLineHighRes(startPoint, endPoint, gridColor, 1.0f * m_ssaaScale);
+                    } else {
+                        drawLine(startPoint, endPoint, gridColor, 1.0f);
+                    }
+                    hasDrawn = true;
+                    break;
+                }
+
+                if (currentLength > 1000.0f) {
+                    if (wasInScreen && !hasDrawn) {
+                        if (m_enableSSAA) {
+                            drawLineHighRes(startPoint, endPoint, gridColor, 1.0f * m_ssaaScale);
+                        } else {
+                            drawLine(startPoint, endPoint, gridColor, 1.0f);
+                        }
+                    }
+                    break;
+                }
+
+                lastPoint = endPoint;
+                currentLength += 1.0f;
+            }
+
+            // 向另一个方向搜索
+            currentLength = 0;
+            foundStart = false;
+            startPoint = lineBase;
+            lastValidPoint = lineBase;
+            wasInScreen = false;
+            hasDrawn = false;
+            lastPoint = lineBase;
+
+            while (true) {
+                Vec3f endPoint = lineBase - direction * currentLength;
+                Vec3f worldEnd = modelMatrix * endPoint;
+                Vec3f viewEnd = viewMatrix * worldEnd;
+                Vec3f clipEnd = projectionMatrix * viewEnd;
+                Vec3f screenEnd = vpMat * clipEnd;
+
+                bool inScreen = screenEnd.x >= 0 && screenEnd.x < screenW && 
+                              screenEnd.y >= 0 && screenEnd.y < screenH;
+
+                if (inScreen) {
+                    if (!foundStart) {
+                        // 如果这是第一个可见点，且之前有不可见点，绘制到这个点
+                        if (currentLength > 0) {
+                            startPoint = lastPoint;
+                            if (m_enableSSAA) {
+                                drawLineHighRes(startPoint, endPoint, gridColor, 1.0f * m_ssaaScale);
+                            } else {
+                                drawLine(startPoint, endPoint, gridColor, 1.0f);
+                            }
+                        }
+                        foundStart = true;
+                    }
+                    lastValidPoint = endPoint;
+                    wasInScreen = true;
+                }
+                else if (wasInScreen && !hasDrawn) {
+                    // 找到结束点，绘制这段网格线
+                    if (m_enableSSAA) {
+                        drawLineHighRes(startPoint, endPoint, gridColor, 1.0f * m_ssaaScale);
+                    } else {
+                        drawLine(startPoint, endPoint, gridColor, 1.0f);
+                    }
+                    hasDrawn = true;
+                    break;
+                }
+
+                if (currentLength > 1000.0f) {
+                    if (wasInScreen && !hasDrawn) {
+                        if (m_enableSSAA) {
+                            drawLineHighRes(startPoint, endPoint, gridColor, 1.0f * m_ssaaScale);
+                        } else {
+                            drawLine(startPoint, endPoint, gridColor, 1.0f);
+                        }
+                    }
+                    break;
+                }
+
+                lastPoint = endPoint;
+                currentLength += 1.0f;
+            }
         }
     }
 }
@@ -1277,7 +1381,7 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
     
     // 计算镜面反射项
     Vec3f numerator = Vec3f(D, D, D) * G * F;
-    float denominator = 4.0f * NdotV * NdotL; // 增加一个更大的epsilon来防止除零
+    float denominator = std::max(0.00001f, 4.0f * NdotV * NdotL); // 增加一个更大的epsilon来防止除零
 
     Vec3f specular = numerator / denominator;
     
@@ -1314,7 +1418,7 @@ float Renderer::distributionGGX(const Vec3f& N, const Vec3f& H, float roughness,
     // 当视角接近掠射角时(NdotV接近0)，增加粗糙度
     if (NdotV < 0.5f && roughness <= 0.2f) {
         float t = 1.0f - (NdotV * 2.0f);  // 从0到1的过渡
-        view_dependent_roughness = std::min(1.0f, roughness + t * roughness);  // 最多增加0.5的粗糙度
+        //view_dependent_roughness = std::min(1.0f, roughness + t * roughness);  // 最多增加0.5的粗糙度
     }
     
     float a = view_dependent_roughness * view_dependent_roughness;
@@ -1388,8 +1492,8 @@ float Renderer::lookupEnergyCompensation(float roughness, float cosTheta) const 
     initializeEnergyCompensationLUT();
     
     // 将输入值映射到查找表索引
-    roughness = std::max(0.0f, std::min(1.0f, roughness));
-    cosTheta = std::max(0.0f, std::min(1.0f, cosTheta));
+    roughness = std::max(0.0001f, std::min(1.0f, roughness));
+    cosTheta = std::max(0.0001f, std::min(1.0f, cosTheta));
     
     float roughnessFloat = roughness * (LUT_SIZE - 1);
     float cosThetaFloat = cosTheta * (LUT_SIZE - 1);

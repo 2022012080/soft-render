@@ -1,0 +1,35 @@
+# Blender MTL File: 'None'
+# Material Count: 3
+
+newmtl 桌面
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Bump D:\\texture\\plywood_1k.blend\\textures\\plywood_nor_gl_1k.exr
+map_Kd D:\\texture\\plywood_1k.blend\\textures\\plywood_diff_1k.jpg
+map_Ns D:\\texture\\plywood_1k.blend\\textures\\plywood_rough_1k.jpg
+
+newmtl 橡胶
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.021220 0.021220 0.021220
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl 金属
+Ns 44.646705
+Ka 0.736364 0.736364 0.736364
+Kd 0.542290 0.542290 0.542290
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
