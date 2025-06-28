@@ -1,6 +1,7 @@
 #include "window.h"
 #include "vector_math.h"
 #include <commctrl.h>
+#include <windowsx.h>
 #include <iostream>
 #include <sstream>
 #include <cmath>
@@ -26,7 +27,26 @@ RenderWindow::RenderWindow(int width, int height)
     , m_metallic(0.0f)         // 新增：金属度初始化
     , m_f0R(0.04f), m_f0G(0.04f), m_f0B(0.04f)  // 新增：菲涅尔F0初始化
     , m_energyCompensationScale(1.0f)  // 新增：能量补偿强度初始化
+    , m_cameraPos(0.0f, 0.0f, 0.0f)
+    , m_cameraTargetPos(0.0f, 0.0f, 0.0f)
+    , m_cameraMoveSpeed(0.15f)
+    , m_fovTarget(20.0f)
+    , m_fovLerpSpeed(0.15f)
+    , m_dragging(false)
+    , m_lastMousePos{0, 0}
+    , m_cameraYaw(0.0f)
+    , m_cameraPitch(0.0f)
+    , m_moveSpeed(0.15f)  // 新增：移动速度初始化
+    , m_cameraRotation()  // 初始化为单位四元数
+    , m_targetRotation()
+    , m_rotationLerpSpeed(0.15f)
+    , m_targetPosition(0.0f, 0.0f, -5.0f)
+    , m_moveLerpSpeed(0.15f)
+    , m_isMoving(false)
 {
+    // 初始化键盘状态数组
+    memset(m_keyStates, 0, sizeof(m_keyStates));
+    
     m_renderer = std::make_unique<Renderer>(m_renderWidth, m_renderHeight);
     m_model = std::make_unique<Model>();
     m_texture = std::make_shared<Texture>();
@@ -146,6 +166,8 @@ bool RenderWindow::Initialize() {
     
     ShowWindow(m_hwnd, SW_SHOW);
     UpdateWindow(m_hwnd);
+    
+    StartMoveTimer();
     
     return true;
 }
@@ -465,6 +487,13 @@ void RenderWindow::CreateControls() {
                                       1270, displacementY, 45, 20,
                                       m_hwnd, (HMENU)ID_SPINE_SHARPNESS, NULL, NULL);
     displacementY += 25;
+
+    // 摄像机角度显示控件（放在右侧靠下，不与其他控件重叠）
+    m_cameraAngleLabel = CreateWindowA("STATIC", "Yaw: 0.0  Pitch: 0.0", WS_VISIBLE | WS_CHILD,
+        1220, 750, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    // 新增：摄像机旋转显示控件（放在摄像机角度显示控件上方）
+    m_cameraRotationLabel = CreateWindowA("STATIC", "Roll: 0.0  Pitch: 0.0  Yaw: 0.0", WS_VISIBLE | WS_CHILD,
+        1220, 725, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
 }
 
 void RenderWindow::Run() {
@@ -497,15 +526,14 @@ LRESULT CALLBACK RenderWindow::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_DESTROY:
+        StopMoveTimer();
         PostQuitMessage(0);
         return 0;
         
     case WM_COMMAND:
         if (HIWORD(wParam) == EN_CHANGE) {
             int controlId = LOWORD(wParam);
-            if (controlId >= ID_OBJECT_X && controlId <= ID_OBJECT_Z) {
-                OnObjectChanged();
-            } else if (controlId >= ID_ROTATION_X && controlId <= ID_ROTATION_Y || controlId == ID_ROTATION_Z) {
+            if (controlId >= ID_ROTATION_X && controlId <= ID_ROTATION_Y || controlId == ID_ROTATION_Z) {
                 OnRotationChanged();
             } else if (controlId >= ID_CAMERA_ROLL_X && controlId <= ID_CAMERA_ROLL_Z) {
                 OnCameraChanged();  // 摄像机roll角度变化也调用OnCameraChanged
@@ -571,6 +599,18 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             }
         }
         return 0;
+
+    case WM_CHAR:
+        if (wParam == VK_RETURN) {
+            HWND focusedWindow = GetFocus();
+            if (focusedWindow) {
+                int controlId = GetDlgCtrlID(focusedWindow);
+                if (controlId >= ID_OBJECT_X && controlId <= ID_OBJECT_Z) {
+                    OnObjectChanged();
+                }
+            }
+        }
+        return 0;
         
     case WM_PAINT: {
         PAINTSTRUCT ps;
@@ -590,9 +630,99 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
     
-    default:
-        return DefWindowProc(m_hwnd, uMsg, wParam, lParam);
+    case WM_KEYDOWN:
+        {
+            m_keyStates[wParam & 0xFF] = true;
+        }
+        break;
+
+    case WM_KEYUP:
+        {
+            m_keyStates[wParam & 0xFF] = false;
+        }
+        break;
+
+    case WM_TIMER:
+        if (wParam == MOVE_TIMER_ID) {
+            UpdateMovement();
+        }
+        break;
+    
+    case WM_MOUSEWHEEL:
+        {
+            short delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            m_fov -= delta * 0.01f * 10.0f; // 每格10度，直接更新FOV
+            if (m_fov < 10.0f) m_fov = 10.0f;
+            if (m_fov > 120.0f) m_fov = 120.0f;
+            UpdateRender();
+        }
+        break;
+    
+    case WM_LBUTTONDOWN: {
+        POINT pt;
+        pt.x = GET_X_LPARAM(lParam);
+        pt.y = GET_Y_LPARAM(lParam);
+        RECT rc;
+        GetWindowRect(m_renderArea, &rc);
+        ScreenToClient(m_hwnd, (LPPOINT)&rc.left);
+        ScreenToClient(m_hwnd, (LPPOINT)&rc.right);
+        if (pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom) {
+            m_dragging = true;
+            m_lastMousePos = pt;
+            SetCapture(m_hwnd);
+        }
+        SetFocus(m_hwnd);
+        break;
     }
+    case WM_MOUSEMOVE: {
+        if (m_dragging && (wParam & MK_LBUTTON)) {
+            POINT pt;
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+            int dx = pt.x - m_lastMousePos.x;
+            int dy = pt.y - m_lastMousePos.y;
+            m_lastMousePos = pt;
+
+            // 修正旋转映射：取反dx和dy
+            m_cameraYaw -= dx / 50.0f;
+            m_cameraPitch += dy / 50.0f;
+
+            // 限制俯仰角范围
+            if (m_cameraPitch > 89.0f) m_cameraPitch = 89.0f;
+            if (m_cameraPitch < -89.0f) m_cameraPitch = -89.0f;
+
+            // 将欧拉角转换为四元数时，需要先绕X轴（pitch），再绕Y轴（yaw）
+            float yawRad = m_cameraYaw * 3.1415926f / 180.0f;
+            float pitchRad = m_cameraPitch * 3.1415926f / 180.0f;
+            
+            // 创建目标四元数：先pitch后yaw
+            VectorMath::Quaternion pitchRotation = VectorMath::Quaternion::fromAxisAngle(Vec3f(1, 0, 0), pitchRad);
+            VectorMath::Quaternion yawRotation = VectorMath::Quaternion::fromAxisAngle(Vec3f(0, 1, 0), yawRad);
+            m_targetRotation = yawRotation * pitchRotation;
+            
+            // 在拖动时使用插值
+            m_cameraRotation = VectorMath::Quaternion::slerp(m_cameraRotation, m_targetRotation, m_rotationLerpSpeed);
+            
+            UpdateCameraAngleLabel();
+            UpdateRender();
+        }
+        break;
+    }
+    case WM_LBUTTONUP:
+        if (m_dragging) {
+            m_dragging = false;
+            // 在松开鼠标时立即应用目标旋转
+            m_cameraRotation = m_targetRotation;
+            ReleaseCapture();
+            UpdateRender();
+        }
+        break;
+    
+    default:
+        break;
+    }
+    
+    return DefWindowProc(m_hwnd, uMsg, wParam, lParam);
 }
 
 void RenderWindow::OnCameraChanged() {
@@ -607,7 +737,7 @@ void RenderWindow::OnCameraChanged() {
     
     GetWindowTextA(m_cameraRollZEdit, buffer, sizeof(buffer));
     m_cameraRollZ = static_cast<float>(atof(buffer));
-    
+    UpdateCameraRotationLabel();
     UpdateRender();
 }
 
@@ -702,42 +832,37 @@ void RenderWindow::OnLightingChanged() {
 }
 
 void RenderWindow::UpdateRender() {
-    // Set up matrices - 使用物体坐标参数代替固定的(0,0,-5)
-    Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(m_objectX, m_objectY, m_objectZ)) * 
-                           VectorMath::rotate(m_rotationZ, Vec3f(0, 0, 1)) *  // Z轴旋转
-                           VectorMath::rotate(m_rotationY, Vec3f(0, 1, 0)) *  // Y轴旋转
-                           VectorMath::rotate(m_rotationX, Vec3f(1, 0, 0)) *  // X轴旋转
-                           VectorMath::scale(Vec3f(0.5f, 0.5f, 0.5f));
+    // --- 平滑插值摄像机位置 ---
+    m_cameraPos = m_cameraPos + (m_cameraTargetPos - m_cameraPos) * m_cameraMoveSpeed;
     
-    // 摄像机固定在原点，朝向原点，应用摄像机角度旋转
-    Vec3f cameraPos(0, 0, 0);  // 摄像机固定在原点
-    Vec3f target(0, 0, -1);    // 摄像机朝向负Z方向
+    // --- 视图矩阵 ---
+    Matrix4x4 modelMatrix = VectorMath::translate(Vec3f(m_objectX, m_objectY, m_objectZ)) * 
+                           VectorMath::rotate(m_rotationZ, Vec3f(0, 0, 1)) *
+                           VectorMath::rotate(m_rotationY, Vec3f(0, 1, 0)) *
+                           VectorMath::rotate(m_rotationX, Vec3f(1, 0, 0)) *
+                           VectorMath::scale(Vec3f(0.5f, 0.5f, 0.5f));
+    // 摄像机位置和朝向
+    Vec3f cameraPos = m_cameraPos;
+    // 使用球面插值平滑过渡到目标旋转
+    m_cameraRotation = VectorMath::Quaternion::slerp(m_cameraRotation, m_targetRotation, m_rotationLerpSpeed);
+    
+    // 获取旋转矩阵
+    Matrix4x4 rotationMatrix = m_cameraRotation.toMatrix();
+    
+    // 计算摄像机方向
+    Vec3f forward = rotationMatrix * Vec3f(0, 0, -1);
+    Vec3f target = m_cameraPos + forward;
     Vec3f worldUp(0, 1, 0);
     
-    // 创建基础视图矩阵（摄像机在原点朝向-Z）
-    Matrix4x4 baseViewMatrix;
-    baseViewMatrix(0, 0) = 1;  baseViewMatrix(0, 1) = 0;  baseViewMatrix(0, 2) = 0;  baseViewMatrix(0, 3) = 0;
-    baseViewMatrix(1, 0) = 0;  baseViewMatrix(1, 1) = 1;  baseViewMatrix(1, 2) = 0;  baseViewMatrix(1, 3) = 0;
-    baseViewMatrix(2, 0) = 0;  baseViewMatrix(2, 1) = 0;  baseViewMatrix(2, 2) = 1;  baseViewMatrix(2, 3) = 0;
-    baseViewMatrix(3, 0) = 0;  baseViewMatrix(3, 1) = 0;  baseViewMatrix(3, 2) = 0;  baseViewMatrix(3, 3) = 1;
-    
-    // 应用摄像机的XYZ轴旋转
-    Matrix4x4 cameraRotation = VectorMath::rotate(m_cameraRollZ, Vec3f(0, 0, 1)) *  // Z轴旋转 (Roll)
-                              VectorMath::rotate(m_cameraRollY, Vec3f(0, 1, 0)) *  // Y轴旋转 (Yaw)
-                              VectorMath::rotate(m_cameraRollX, Vec3f(1, 0, 0));   // X轴旋转 (Pitch)
-    
-    Matrix4x4 viewMatrix = baseViewMatrix * cameraRotation;
-    
+    Matrix4x4 viewMatrix = VectorMath::lookAt(cameraPos, target, worldUp);
     Matrix4x4 projectionMatrix = VectorMath::perspective(m_fov, 
         (float)m_renderWidth / m_renderHeight, 0.1f, 100.0f);
-    
     Matrix4x4 viewportMatrix;
     viewportMatrix(0, 0) = m_renderWidth / 2.0f;
     viewportMatrix(1, 1) = m_renderHeight / 2.0f;
     viewportMatrix(2, 2) = 1.0f;
     viewportMatrix(0, 3) = m_renderWidth / 2.0f;
     viewportMatrix(1, 3) = m_renderHeight / 2.0f;
-    
     m_renderer->setModelMatrix(modelMatrix);
     m_renderer->setViewMatrix(viewMatrix);
     m_renderer->setProjectionMatrix(projectionMatrix);
@@ -1211,4 +1336,102 @@ void RenderWindow::OnDisplacementChanged() {
     
     // 更新渲染
     UpdateRender();
+}
+
+void RenderWindow::StartMoveTimer() {
+    SetTimer(m_hwnd, MOVE_TIMER_ID, MOVE_TIMER_INTERVAL, nullptr);
+}
+
+void RenderWindow::StopMoveTimer() {
+    KillTimer(m_hwnd, MOVE_TIMER_ID);
+}
+
+void RenderWindow::UpdateMovement() {
+    bool needsUpdate = false;
+    float moveStep = m_moveSpeed * MOVE_TIMER_INTERVAL / 1000.0f * 40.0f;
+
+    // 获取当前摄像机的朝向
+    Matrix4x4 rotationMatrix = m_cameraRotation.toMatrix();
+    Vec3f forward = rotationMatrix * Vec3f(0, 0, -1);
+    Vec3f right = rotationMatrix * Vec3f(1, 0, 0);
+    
+    forward = forward.normalize();
+    right = right.normalize();
+
+    // 检查是否有任何移动键被按下
+    bool anyMovementKey = m_keyStates['W'] || m_keyStates['S'] || 
+                         m_keyStates['A'] || m_keyStates['D'] || 
+                         (m_keyStates[VK_SPACE] && (m_keyStates['W'] || m_keyStates['S']));
+
+    if (!anyMovementKey) {
+        // 如果没有按键按下，停止移动插值
+        m_isMoving = false;
+        m_targetPosition = Vec3f(m_objectX, m_objectY, m_objectZ);
+        needsUpdate = true;
+    } else {
+        // 计算目标位置
+        Vec3f currentTarget(m_targetPosition.x, m_targetPosition.y, m_targetPosition.z);
+        m_isMoving = true;
+
+        if (m_keyStates['W']) {
+            if (m_keyStates[VK_SPACE]) {
+                currentTarget.y += moveStep;
+            } else {
+                currentTarget.x -= forward.x * moveStep;
+                currentTarget.y -= forward.y * moveStep;
+                currentTarget.z -= forward.z * moveStep;
+            }
+        }
+        if (m_keyStates['S']) {
+            if (m_keyStates[VK_SPACE]) {
+                currentTarget.y -= moveStep;
+            } else {
+                currentTarget.x += forward.x * moveStep;
+                currentTarget.y += forward.y * moveStep;
+                currentTarget.z += forward.z * moveStep;
+            }
+        }
+        if (m_keyStates['A']) {
+            currentTarget.x += right.x * moveStep;
+            currentTarget.y += right.y * moveStep;
+            currentTarget.z += right.z * moveStep;
+        }
+        if (m_keyStates['D']) {
+            currentTarget.x -= right.x * moveStep;
+            currentTarget.y -= right.y * moveStep;
+            currentTarget.z -= right.z * moveStep;
+        }
+
+        m_targetPosition = currentTarget;
+        needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+        // 应用插值移动
+        if (m_isMoving) {
+            Vec3f currentPos(m_objectX, m_objectY, m_objectZ);
+            Vec3f newPos = VectorMath::lerp(currentPos, m_targetPosition, m_moveLerpSpeed);
+            m_objectX = newPos.x;
+            m_objectY = newPos.y;
+            m_objectZ = newPos.z;
+        }
+
+        // 更新编辑框显示的值
+        SetWindowTextA(m_objectXEdit, std::to_string(m_objectX).c_str());
+        SetWindowTextA(m_objectYEdit, std::to_string(m_objectY).c_str());
+        SetWindowTextA(m_objectZEdit, std::to_string(m_objectZ).c_str());
+        UpdateRender();
+    }
+}
+
+void RenderWindow::UpdateCameraAngleLabel() {
+    char buf[128];
+    sprintf_s(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f", m_cameraYaw, m_cameraPitch);
+    SetWindowTextA(m_cameraAngleLabel, buf);
+}
+
+void RenderWindow::UpdateCameraRotationLabel() {
+    char buf[128];
+    sprintf_s(buf, sizeof(buf), "Roll: %.1f  Pitch: %.1f  Yaw: %.1f", m_cameraRollX, m_cameraRollY, m_cameraRollZ);
+    SetWindowTextA(m_cameraRotationLabel, buf);
 } 

@@ -129,4 +129,133 @@ namespace VectorMath {
     Vec2f lerp(const Vec2f& a, const Vec2f& b, float t) {
         return a + (b - a) * t;
     }
+
+    // 四元数实现
+    Quaternion Quaternion::fromEulerAngles(float pitch, float yaw, float roll) {
+        // 将角度转换为弧度
+        float cy = cos(yaw * 0.5f);
+        float sy = sin(yaw * 0.5f);
+        float cp = cos(pitch * 0.5f);
+        float sp = sin(pitch * 0.5f);
+        float cr = cos(roll * 0.5f);
+        float sr = sin(roll * 0.5f);
+
+        Quaternion q;
+        q.w = cr * cp * cy + sr * sp * sy;
+        q.x = sr * cp * cy - cr * sp * sy;
+        q.y = cr * sp * cy + sr * cp * sy;
+        q.z = cr * cp * sy - sr * sp * cy;
+        
+        return q;
+    }
+
+    Quaternion Quaternion::fromAxisAngle(const Vec3f& axis, float angle) {
+        float halfAngle = angle * 0.5f;
+        float s = sin(halfAngle);
+        
+        Quaternion q;
+        q.w = cos(halfAngle);
+        q.x = axis.x * s;
+        q.y = axis.y * s;
+        q.z = axis.z * s;
+        
+        return q;
+    }
+
+    Quaternion Quaternion::operator*(const Quaternion& q) const {
+        return Quaternion(
+            w * q.x + x * q.w + y * q.z - z * q.y,
+            w * q.y - x * q.z + y * q.w + z * q.x,
+            w * q.z + x * q.y - y * q.x + z * q.w,
+            w * q.w - x * q.x - y * q.y - z * q.z
+        );
+    }
+
+    Vec3f Quaternion::operator*(const Vec3f& v) const {
+        // 将向量转换为纯四元数
+        Quaternion p(v.x, v.y, v.z, 0);
+        
+        // q * p * q^-1
+        Quaternion result = (*this) * p * this->conjugate();
+        return Vec3f(result.x, result.y, result.z);
+    }
+
+    Quaternion Quaternion::conjugate() const {
+        return Quaternion(-x, -y, -z, w);
+    }
+
+    Quaternion Quaternion::normalize() const {
+        float len = sqrt(x * x + y * y + z * z + w * w);
+        if (len > 0) {
+            float invLen = 1.0f / len;
+            return Quaternion(x * invLen, y * invLen, z * invLen, w * invLen);
+        }
+        return *this;
+    }
+
+    Matrix4x4 Quaternion::toMatrix() const {
+        Matrix4x4 result;
+        float xx = x * x;
+        float xy = x * y;
+        float xz = x * z;
+        float xw = x * w;
+        float yy = y * y;
+        float yz = y * z;
+        float yw = y * w;
+        float zz = z * z;
+        float zw = z * w;
+
+        result(0, 0) = 1 - 2 * (yy + zz);
+        result(0, 1) = 2 * (xy - zw);
+        result(0, 2) = 2 * (xz + yw);
+        
+        result(1, 0) = 2 * (xy + zw);
+        result(1, 1) = 1 - 2 * (xx + zz);
+        result(1, 2) = 2 * (yz - xw);
+        
+        result(2, 0) = 2 * (xz - yw);
+        result(2, 1) = 2 * (yz + xw);
+        result(2, 2) = 1 - 2 * (xx + yy);
+
+        return result;
+    }
+
+    Quaternion Quaternion::slerp(const Quaternion& q1, const Quaternion& q2, float t) {
+        // 确保t在[0,1]范围内
+        t = clamp(t, 0.0f, 1.0f);
+        
+        // 计算四元数点积
+        float dot = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
+        
+        // 如果点积为负，取q2的负值以获得较短的路径
+        Quaternion target = q2;
+        if (dot < 0) {
+            dot = -dot;
+            target = Quaternion(-q2.x, -q2.y, -q2.z, -q2.w);
+        }
+        
+        // 如果四元数非常接近，使用线性插值
+        if (dot > 0.9995f) {
+            Quaternion result(
+                q1.x + (target.x - q1.x) * t,
+                q1.y + (target.y - q1.y) * t,
+                q1.z + (target.z - q1.z) * t,
+                q1.w + (target.w - q1.w) * t
+            );
+            return result.normalize();
+        }
+        
+        // 执行球面插值
+        float theta = acos(dot);
+        float sinTheta = sin(theta);
+        float s1 = sin((1 - t) * theta) / sinTheta;
+        float s2 = sin(t * theta) / sinTheta;
+        
+        return Quaternion(
+            q1.x * s1 + target.x * s2,
+            q1.y * s1 + target.y * s2,
+            q1.z * s1 + target.z * s2,
+            q1.w * s1 + target.w * s2
+        ).normalize();
+    }
 } 

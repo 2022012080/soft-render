@@ -3,6 +3,59 @@
 #include <fstream>
 #include <iostream>
 #include <cmath>
+#include <atomic>
+
+// ================= ThreadPool 实现 =================
+ThreadPool::ThreadPool(size_t numThreads) : stop(false), workingCount(0) {
+    for (size_t i = 0; i < numThreads; ++i) {
+        workers.emplace_back([this]() {
+            while (true) {
+                std::function<void()> task;
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    condition.wait(lock, [this] { return stop || !tasks.empty(); });
+                    if (stop && tasks.empty()) return;
+                    task = std::move(tasks.front());
+                    tasks.pop();
+                    ++workingCount;
+                }
+                task();
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    --workingCount;
+                    if (tasks.empty() && workingCount == 0) {
+                        doneCondition.notify_all();
+                    }
+                }
+            }
+        });
+    }
+}
+
+ThreadPool::~ThreadPool() {
+    {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        stop = true;
+    }
+    condition.notify_all();
+    for (auto& worker : workers) {
+        if (worker.joinable()) worker.join();
+    }
+}
+
+void ThreadPool::enqueue(std::function<void()> task) {
+    {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        tasks.push(std::move(task));
+    }
+    condition.notify_one();
+}
+
+void ThreadPool::waitAll() {
+    std::unique_lock<std::mutex> lock(queueMutex);
+    doneCondition.wait(lock, [this] { return tasks.empty() && workingCount == 0; });
+}
+// ================= ThreadPool 实现结束 =================
 
 Renderer::Renderer(int w, int h) : width(w), height(h) {
     frameBuffer.resize(width * height);
@@ -57,6 +110,8 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     
     // 初始化法向量变换矩阵
     updateNormalMatrix();
+    
+    m_threadPool = std::make_unique<ThreadPool>(8);
 }
 
 void Renderer::enableSSAA(bool enable, int scale) {
@@ -146,18 +201,16 @@ void Renderer::clearDepth() {
 }
 
 void Renderer::renderModel(const Model& model) {
-    if (m_enableSSAA) {
-        renderToHighRes(model);
-        downsampleFromHighRes();
-    } else {
-        const auto& vertices = model.getVertices();
-        
-        for (size_t i = 0; i < vertices.size(); i += 3) {
-            if (i + 2 < vertices.size()) {
-                renderTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
-            }
-        }
+    size_t faceCount = model.getFaceCount();
+    if (faceCount == 0) return;
+    for (size_t i = 0; i < faceCount; ++i) {
+        m_threadPool->enqueue([this, &model, i]() {
+            Vertex v0, v1, v2;
+            model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+            renderTriangle(v0, v1, v2);
+        });
     }
+    m_threadPool->waitAll();
 }
 
 void Renderer::renderToHighRes(const Model& model) {
@@ -1158,7 +1211,8 @@ Light& Renderer::getLight(int index) {
 
 Vec3f Renderer::calculateBRDFLighting(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
     // 环境光
-    Vec3f ambient = baseColor * (ambientIntensity * ambientStrength);
+    float ambientOcclusion = (1.0f - m_metallic) * (1.0f - m_roughness);
+    Vec3f ambient = baseColor * (ambientIntensity * ambientStrength) * ambientOcclusion;
     
     // 初始化总光照贡献
     Vec3f totalLighting = ambient;
@@ -1199,8 +1253,8 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
     Vec3f H = (V + L).normalize();
     
     // 计算各种点积
-    float NdotV = std::max(0.0f, N.dot(V));
-    float NdotL = std::max(0.0f, N.dot(L));
+    float NdotV = std::max(0.00001f, N.dot(V));
+    float NdotL = std::max(0.00001f, N.dot(L));
     float HdotV = std::max(0.0f, H.dot(V));
     
     // 如果表面背向光源，返回黑色
@@ -1217,13 +1271,14 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
     }
     
     // Cook-Torrance BRDF 计算
-    float D = distributionGGX(N, H, m_roughness);           // 法线分布函数
+    float D = distributionGGX(N, H, m_roughness, NdotV);           // 法线分布函数
     float G = geometrySmith(N, V, L, m_roughness);          // 几何遮蔽函数
     Vec3f F = fresnelSchlick(HdotV, m_F0);                  // 菲涅尔项
     
     // 计算镜面反射项
     Vec3f numerator = Vec3f(D, D, D) * G * F;
-    float denominator = 4.0f * (NdotV + 0.0001f) * (NdotL + 0.0001f);    // 防止除零
+    float denominator = 4.0f * NdotV * NdotL; // 增加一个更大的epsilon来防止除零
+
     Vec3f specular = numerator / denominator;
     
     // 能量守恒：漫反射 = (1 - 镜面反射) * (1 - 金属度)
@@ -1252,8 +1307,17 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
 }
 
 // GGX 法线分布函数 (Trowbridge-Reitz)
-float Renderer::distributionGGX(const Vec3f& N, const Vec3f& H, float roughness) const {
-    float a = roughness * roughness;
+float Renderer::distributionGGX(const Vec3f& N, const Vec3f& H, float roughness, float NdotV) const {
+    // 在掠射角时增加有效粗糙度
+    float view_dependent_roughness = roughness;
+    
+    // 当视角接近掠射角时(NdotV接近0)，增加粗糙度
+    if (NdotV < 0.5f && roughness <= 0.2f) {
+        float t = 1.0f - (NdotV * 2.0f);  // 从0到1的过渡
+        view_dependent_roughness = std::min(1.0f, roughness + t * roughness);  // 最多增加0.5的粗糙度
+    }
+    
+    float a = view_dependent_roughness * view_dependent_roughness;
     float a2 = a * a;
     float NdotH = std::max(0.0f, N.dot(H));
     float NdotH2 = NdotH * NdotH;
@@ -1277,8 +1341,8 @@ float Renderer::geometrySchlickGGX(float NdotV, float roughness) const {
 }
 
 float Renderer::geometrySmith(const Vec3f& N, const Vec3f& V, const Vec3f& L, float roughness) const {
-    float NdotV = std::max(0.0001f, N.dot(V)); 
-    float NdotL = std::max(0.0001f, N.dot(L)); 
+    float NdotV = std::max(0.00001f, N.dot(V)); 
+    float NdotL = std::max(0.00001f, N.dot(L)); 
     float ggx2 = geometrySchlickGGX(NdotV, roughness);
     float ggx1 = geometrySchlickGGX(NdotL, roughness);
     return ggx1 * ggx2;
@@ -1307,8 +1371,8 @@ void Renderer::initializeEnergyCompensationLUT() const {
             float cosTheta = static_cast<float>(cosThetaIdx) / (LUT_SIZE - 1);
             
             // 防止除零
-            roughness = std::max(0.001f, roughness);
-            cosTheta = std::max(0.001f, cosTheta);
+            roughness = std::max(0.0f, roughness);
+            cosTheta = std::max(0.0f, cosTheta);
             
             // 计算能量积分
             m_energyCompensationLUT[roughnessIdx][cosThetaIdx] = computeEnergyIntegral(roughness, cosTheta);
@@ -1324,8 +1388,8 @@ float Renderer::lookupEnergyCompensation(float roughness, float cosTheta) const 
     initializeEnergyCompensationLUT();
     
     // 将输入值映射到查找表索引
-    roughness = std::max(0.001f, std::min(1.0f, roughness));
-    cosTheta = std::max(0.001f, std::min(1.0f, cosTheta));
+    roughness = std::max(0.0f, std::min(1.0f, roughness));
+    cosTheta = std::max(0.0f, std::min(1.0f, cosTheta));
     
     float roughnessFloat = roughness * (LUT_SIZE - 1);
     float cosThetaFloat = cosTheta * (LUT_SIZE - 1);
@@ -1379,17 +1443,17 @@ float Renderer::computeEnergyIntegral(float roughness, float cosTheta) const {
             Vec3f L = sampleDir;
             Vec3f H = (V + L).normalize();
             
-            float NdotL = std::max(0.0f, N.dot(L));
-            float NdotV = std::max(0.0f, N.dot(V));
+            float NdotL = std::max(0.0001f, N.dot(L));
+            float NdotV = std::max(0.0001f, N.dot(V));
             float VdotH = std::max(0.0f, V.dot(H));
             
             if (NdotL > 0.0f && NdotV > 0.0f) {
                 // 计算BRDF项
-                float D = distributionGGX(N, H, roughness);
+                float D = distributionGGX(N, H, roughness, NdotV);
                 float G = geometrySmith(N, V, L, roughness);
                 
                 // 计算能量贡献
-                float brdfContrib = (D * G) / (4.0f * NdotV * NdotL + 0.0001f);
+                float brdfContrib = (D * G) / (4.0f * NdotV * NdotL);
                 totalEnergy += brdfContrib * NdotL;
             }
         }
@@ -1407,8 +1471,8 @@ float Renderer::computeEnergyIntegral(float roughness, float cosTheta) const {
 // 新增：计算能量补偿项
 Vec3f Renderer::calculateEnergyCompensationTerm(const Vec3f& N, const Vec3f& V, const Vec3f& L, 
                                                  float roughness, const Vec3f& F0) const {
-    float NdotV = std::max(0.0f, N.dot(V));
-    float NdotL = std::max(0.0f, N.dot(L));
+    float NdotV = std::max(0.0001f, N.dot(V));
+    float NdotL = std::max(0.0001f, N.dot(L));
     
     // 查找能量损失
     float energyLossV = lookupEnergyCompensation(roughness, NdotV);

@@ -6,6 +6,7 @@
 #include "renderer.h"
 #include "model.h"
 #include "texture.h"
+#include "vector_math.h"
 
 class RenderWindow {
 public:
@@ -65,6 +66,11 @@ public:
     
     // 新增：位移着色器控制方法
     void OnDisplacementChanged();
+    
+    HWND m_cameraAngleLabel; // 新增：摄像机角度显示控件
+    HWND m_cameraRotationLabel; // 新增：摄像机旋转显示控件
+    void UpdateCameraAngleLabel();
+    void UpdateCameraRotationLabel(); // 新增：摄像机旋转显示方法
     
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -283,4 +289,35 @@ private:
     static const int ID_DISPLACEMENT_FREQ = 1052;
     static const int ID_SPINE_LENGTH = 1053;
     static const int ID_SPINE_SHARPNESS = 1054;
+    
+    // 新增：平滑移动相关
+    void StartMoveTimer();
+    void StopMoveTimer();
+    void UpdateMovement();
+    static const int MOVE_TIMER_ID = 1;
+    static const int MOVE_TIMER_INTERVAL = 16; // ~60fps
+    bool m_keyStates[256];
+    float m_moveSpeed;
+    
+    // 摄像机平滑移动相关
+    Vec3f m_cameraPos;         // 当前摄像机位置
+    Vec3f m_cameraTargetPos;   // 目标摄像机位置
+    float m_cameraMoveSpeed;   // 摄像机移动速度
+    float m_fovTarget;         // 目标FOV
+    float m_fovLerpSpeed;      // FOV插值速度
+    
+    // 摄像机旋转与鼠标拖动
+    float m_cameraYaw;
+    float m_cameraPitch;
+    // 添加四元数相关的变量
+    VectorMath::Quaternion m_cameraRotation;
+    VectorMath::Quaternion m_targetRotation;
+    float m_rotationLerpSpeed;
+    bool m_dragging = false;
+    POINT m_lastMousePos;
+    
+    // 添加移动插值相关变量
+    Vec3f m_targetPosition;
+    float m_moveLerpSpeed;
+    bool m_isMoving;
 }; 

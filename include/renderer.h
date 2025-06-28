@@ -4,6 +4,11 @@
 #include "texture.h"
 #include <vector>
 #include <memory>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <functional>
 
 // 帧缓冲像素
 struct Pixel {
@@ -31,6 +36,22 @@ struct Light {
     Light() : type(LightType::POINT), position(0, 0, 0), color(1, 1, 1), intensity(1.0f), enabled(true) {}
     Light(const Vec3f& pos, const Vec3f& col, float intens, LightType lightType = LightType::POINT) 
         : type(lightType), position(pos), color(col), intensity(intens), enabled(true) {}
+};
+
+class ThreadPool {
+public:
+    ThreadPool(size_t numThreads);
+    ~ThreadPool();
+    void enqueue(std::function<void()> task);
+    void waitAll();
+private:
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+    std::mutex queueMutex;
+    std::condition_variable condition;
+    bool stop;
+    size_t workingCount = 0;
+    std::condition_variable doneCondition;
 };
 
 // 渲染器类
@@ -105,6 +126,8 @@ private:
     
     // 新增：计算海胆刺位移
     Vec3f calculateSeaUrchinDisplacement(const Vec3f& position, const Vec3f& normal) const;
+    
+    std::unique_ptr<ThreadPool> m_threadPool;
     
 public:
     Renderer(int w, int h);
@@ -303,7 +326,7 @@ private:
     Vec3f calculateSingleLightBRDF(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor);
     
     // GGX 法线分布函数 (Trowbridge-Reitz)
-    float distributionGGX(const Vec3f& N, const Vec3f& H, float roughness) const;
+    float distributionGGX(const Vec3f& N, const Vec3f& H, float roughness, float NdotV) const;
     
     // Smith 几何遮蔽函数的子函数
     float geometrySchlickGGX(float NdotV, float roughness) const;

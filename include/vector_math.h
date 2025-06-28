@@ -129,6 +129,30 @@ struct Matrix4x4 {
 
 // 数学工具函数
 namespace VectorMath {
+    // 四元数类定义
+    class Quaternion {
+    public:
+        float x, y, z, w;  // w是实部，(x,y,z)是虚部
+
+        Quaternion() : x(0), y(0), z(0), w(1) {}
+        Quaternion(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+        
+        // 从欧拉角创建四元数（弧度）
+        static Quaternion fromEulerAngles(float pitch, float yaw, float roll);
+        // 从轴角创建四元数
+        static Quaternion fromAxisAngle(const Vec3f& axis, float angle);
+        
+        Quaternion operator*(const Quaternion& q) const;
+        Vec3f operator*(const Vec3f& v) const;
+        
+        Quaternion conjugate() const;
+        Quaternion normalize() const;
+        Matrix4x4 toMatrix() const;
+        
+        // 球面插值
+        static Quaternion slerp(const Quaternion& q1, const Quaternion& q2, float t);
+    };
+
     Matrix4x4 perspective(float fov, float aspect, float near, float far);
     Matrix4x4 lookAt(const Vec3f& eye, const Vec3f& center, const Vec3f& up);
     Matrix4x4 translate(const Vec3f& v);
