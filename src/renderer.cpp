@@ -1578,28 +1578,16 @@ Vec3f Renderer::calculateEnergyCompensationTerm(const Vec3f& N, const Vec3f& V, 
     float NdotV = std::max(0.0001f, N.dot(V));
     float NdotL = std::max(0.0001f, N.dot(L));
     
-    // 查找能量损失
-    float energyLossV = lookupEnergyCompensation(roughness, NdotV);
-    float energyLossL = lookupEnergyCompensation(roughness, NdotL);
+    // 简化能量补偿计算
+    float energyLoss = 1.0f - roughness;  // 粗糙度越高，能量损失越小
     
-    // 计算平均能量损失
-    float avgEnergyLoss = (energyLossV + energyLossL) * 0.5f;
-    
-    // 基于菲涅尔项计算补偿强度
+    // 计算菲涅尔项
     Vec3f H = (V + L).normalize();
     float HdotV = std::max(0.0f, H.dot(V));
     Vec3f F = fresnelSchlick(HdotV, F0);
     
-    // 能量补偿项：补偿由于微表面遮蔽而损失的能量
-    // 使用一个简化的模型：损失的能量按照菲涅尔系数重新分配
-    Vec3f energyCompensation = F * avgEnergyLoss * (1.0f / M_PI);
-    
-    // 针对粗糙表面，增加额外的散射项来模拟多次散射
-    if (roughness > 0.3f) {
-        float roughnessFactor = (roughness - 0.3f) / 0.7f;  // 0.3到1.0映射到0到1
-        Vec3f multiScatter = F0 * avgEnergyLoss * roughnessFactor * 0.5f;
-        energyCompensation += multiScatter;
-    }
+    // 简化的能量补偿：基于粗糙度和菲涅尔项
+    Vec3f energyCompensation = F * energyLoss * 0.5f;
     
     return energyCompensation;
 }
