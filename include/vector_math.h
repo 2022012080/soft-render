@@ -165,4 +165,6 @@ namespace VectorMath {
     float lerp(float a, float b, float t);
     Vec3f lerp(const Vec3f& a, const Vec3f& b, float t);
     Vec2f lerp(const Vec2f& a, const Vec2f& b, float t);
-} 
+}
+
+inline Vec3f operator*(float f, const Vec3f& v) { return Vec3f(f * v.x, f * v.y, f * v.z); } 

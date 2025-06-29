@@ -2,6 +2,7 @@
 #include "vector_math.h"
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 // 顶点结构
 struct Vertex {
@@ -38,8 +39,13 @@ private:
     // 处理后的顶点数据
     std::vector<Vertex> processedVertices;
     
+    // 每个面的ka/kd/ks/ke（均为Vec3f），如无则为负值
+    std::vector<Vec3f> faceKa, faceKd, faceKs, faceKe;
+    // 每个面的透明度（d项），如无则为1.0
+    std::vector<float> faceAlpha;
+    
 public:
-    Model() {}
+    Model();
     
     // 加载OBJ文件
     bool loadFromFile(const std::string& filename);
@@ -61,6 +67,14 @@ public:
     
     // 缩放模型
     void scaleModel(float scale);
+    
+    // 获取指定面的ka/kd/ks/ke，若无返回Vec3f(-1,-1,-1)
+    Vec3f getFaceKa(int faceIdx) const;
+    Vec3f getFaceKd(int faceIdx) const;
+    Vec3f getFaceKs(int faceIdx) const;
+    Vec3f getFaceKe(int faceIdx) const;
+    // 获取指定面的透明度，若无返回1.0
+    float getFaceAlpha(int faceIdx) const;
     
 private:
     // 处理顶点数据

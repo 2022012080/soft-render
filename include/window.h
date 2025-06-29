@@ -72,6 +72,20 @@ public:
     void UpdateCameraAngleLabel();
     void UpdateCameraRotationLabel(); // 新增：摄像机旋转显示方法
     
+    // 新增：自发光控件
+    HWND m_toggleEmissionBtn;
+    HWND m_emissionStrengthEdit;
+    HWND m_emissionColorREdit, m_emissionColorGEdit, m_emissionColorBEdit;
+    HWND m_emissionLabel;
+    
+    // 新增：自发光控制方法
+    void OnEmissionChanged();
+    
+    // Phong参数输入框（RGB）
+    HWND m_ambientREdit, m_ambientGEdit, m_ambientBEdit;
+    HWND m_diffuseREdit, m_diffuseGEdit, m_diffuseBEdit;
+    HWND m_specularREdit, m_specularGEdit, m_specularBEdit;
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -159,7 +173,7 @@ private:
     float m_dirLightX, m_dirLightY, m_dirLightZ, m_dirLightIntensity;
     
     // 新增：光照系数设置
-    float m_diffuseStrength, m_specularStrength, m_ambientStrength;
+    Vec3f m_diffuseStrength, m_specularStrength, m_ambientStrength;
     
     // 新增：高光指数设置
     float m_shininess;
@@ -320,4 +334,11 @@ private:
     Vec3f m_targetPosition;
     float m_moveLerpSpeed;
     bool m_isMoving;
+    
+    // 新增：自发光控制ID
+    static const int ID_TOGGLE_EMISSION = 1052;
+    static const int ID_EMISSION_STRENGTH = 1053;
+    static const int ID_EMISSION_COLOR_R = 1054;
+    static const int ID_EMISSION_COLOR_G = 1055;
+    static const int ID_EMISSION_COLOR_B = 1056;
 }; 

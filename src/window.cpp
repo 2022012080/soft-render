@@ -11,18 +11,18 @@ RenderWindow::RenderWindow(int width, int height)
     , m_renderWidth(1200), m_renderHeight(900)
     , m_rotationX(0.0f), m_rotationY(0.0f), m_rotationZ(0.0f)
     , m_cameraRollX(0.0f), m_cameraRollY(0.0f), m_cameraRollZ(0.0f)
-    , m_objectX(0.0f), m_objectY(0.0f), m_objectZ(-5.0f)
+    , m_objectX(-0.2f), m_objectY(0.08f), m_objectZ(-2.0f)
     , m_fov(20.0f)  // 初始FOV为20度
     , m_lightX(3.0f), m_lightY(-2.0f), m_lightZ(3.0f), m_lightIntensity(30.0f)
     , m_light2X(-3.0f), m_light2Y(2.0f), m_light2Z(1.0f), m_light2Intensity(0.0f) // 第二个光源
     , m_dirLightX(0.0f), m_dirLightY(-1.0f), m_dirLightZ(0.0f), m_dirLightIntensity(5.0f) // 平面光源：向下照射
-    , m_diffuseStrength(0.2f), m_specularStrength(2.0f), m_ambientStrength(0.15f) // 光照系数
+    , m_diffuseStrength(0.2f, 0.2f, 0.2f), m_specularStrength(2.0f, 2.0f, 2.0f), m_ambientStrength(0.15f, 0.15f, 0.15f) // 光照系数
     , m_shininess(128.0f) // 新增：高光指数初始化
     , m_hwnd(nullptr), m_renderArea(nullptr)
     , m_bitmap(nullptr), m_memDC(nullptr), m_bitmapData(nullptr)
     , m_currentModelFile("Untitled.obj") // 设置初始模型文件
-    , m_currentTextureFile("texture.bmp") // 默认纹理文件
-    , m_currentNormalMapFile("normal.bmp") // 默认法线贴图文件
+    , m_currentTextureFile("") // 默认纹理文件
+    , m_currentNormalMapFile("") // 默认法线贴图文件
     , m_roughness(0.5f)        // 新增：粗糙度初始化
     , m_metallic(0.0f)         // 新增：金属度初始化
     , m_f0R(0.04f), m_f0G(0.04f), m_f0B(0.04f)  // 新增：菲涅尔F0初始化
@@ -51,6 +51,11 @@ RenderWindow::RenderWindow(int width, int height)
     m_model = std::make_unique<Model>();
     m_texture = std::make_shared<Texture>();
     m_normalMap = std::make_shared<Texture>();
+    
+    // 初始化自发光参数
+    m_renderer->setEmissionEnabled(false);  // 默认关闭自发光
+    m_renderer->setEmissionStrength(1.0f);  // 默认自发光强度
+    m_renderer->setEmissionColor(Vec3f(1.0f, 1.0f, 1.0f));  // 默认白色自发光
 }
 
 RenderWindow::~RenderWindow() {
@@ -104,32 +109,12 @@ bool RenderWindow::Initialize() {
         std::cout << "加载模型失败: " << modelPath << std::endl;
     }
     
-    // 尝试加载BMP纹理文件，如果失败则创建默认纹理
-    if (!m_texture->loadFromFile("assets/texture.bmp")) {
-        std::cout << "未找到 assets/texture.bmp，尝试加载其他纹理文件..." << std::endl;
-        
-        // 尝试其他常见的纹理文件名
-        if (!m_texture->loadFromFile("assets/cube_texture.bmp") &&
-            !m_texture->loadFromFile("assets/diffuse.bmp") &&
-            !m_texture->loadFromFile("texture.bmp")) {
-            std::cout << "未找到纹理文件，使用默认纹理" << std::endl;
-            m_texture->createDefault(256, 256);
-        } else {
-            std::cout << "成功加载纹理文件" << std::endl;
-        }
-    } else {
-        std::cout << "成功加载 assets/texture.bmp" << std::endl;
-    }
-    
+    // 创建默认纹理
+    m_texture->createDefault(256, 256);
     m_renderer->setTexture(m_texture);
     
-    // 尝试加载默认法线贴图
-    if (m_normalMap->loadFromFile("assets/" + m_currentNormalMapFile)) {
-        std::cout << "成功加载默认法线贴图: " << m_currentNormalMapFile << std::endl;
-        m_renderer->setNormalMap(m_normalMap);
-    } else {
-        std::cout << "未找到默认法线贴图: " << m_currentNormalMapFile << std::endl;
-    }
+    // 不加载默认法线贴图
+    m_renderer->setNormalMap(nullptr);
     
     // Create DIB for rendering
     HDC hdc = GetDC(m_hwnd);
@@ -388,26 +373,26 @@ void RenderWindow::CreateControls() {
     CreateWindowA("STATIC", "Texture:", WS_VISIBLE | WS_CHILD,
         1220, 480, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_textureFileEdit = CreateWindowA("EDIT", "texture.bmp", WS_VISIBLE | WS_CHILD | WS_BORDER,
+    m_textureFileEdit = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1220, 495, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_TEXTURE_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadTextureBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1345, 495, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_TEXTURE, GetModuleHandle(nullptr), nullptr);
     
-    m_textureStatusLabel = CreateWindowA("STATIC", "texture.bmp", WS_VISIBLE | WS_CHILD,
+    m_textureStatusLabel = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD,
         1390, 495, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Normal map file controls
     CreateWindowA("STATIC", "Normal:", WS_VISIBLE | WS_CHILD,
         1220, 520, 60, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
-    m_normalMapFileEdit = CreateWindowA("EDIT", "normal.bmp", WS_VISIBLE | WS_CHILD | WS_BORDER,
+    m_normalMapFileEdit = CreateWindowA("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1220, 535, 120, 20, m_hwnd, (HMENU)(LONG_PTR)ID_NORMAL_MAP_FILE, GetModuleHandle(nullptr), nullptr);
     
     m_loadNormalMapBtn = CreateWindowA("BUTTON", "Load", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1345, 535, 40, 20, m_hwnd, (HMENU)(LONG_PTR)ID_LOAD_NORMAL_MAP, GetModuleHandle(nullptr), nullptr);
     
-    m_normalMapStatusLabel = CreateWindowA("STATIC", "normal.bmp", WS_VISIBLE | WS_CHILD,
+    m_normalMapStatusLabel = CreateWindowA("STATIC", "", WS_VISIBLE | WS_CHILD,
         1390, 535, 100, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Render area
@@ -519,10 +504,63 @@ void RenderWindow::CreateControls() {
 
     // 摄像机角度显示控件（放在右侧靠下，不与其他控件重叠）
     m_cameraAngleLabel = CreateWindowA("STATIC", "Yaw: 0.0  Pitch: 0.0", WS_VISIBLE | WS_CHILD,
-        1220, 750, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1420, 750, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     // 新增：摄像机旋转显示控件（放在摄像机角度显示控件上方）
     m_cameraRotationLabel = CreateWindowA("STATIC", "Roll: 0.0  Pitch: 0.0  Yaw: 0.0", WS_VISIBLE | WS_CHILD,
-        1220, 725, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        1420, 725, 200, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    // 新增：自发光控件
+    m_emissionLabel = CreateWindowA("STATIC", "Emission:", WS_VISIBLE | WS_CHILD,
+        1420, 775, 120, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        
+    m_toggleEmissionBtn = CreateWindowA("BUTTON", "Enable", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
+        1420, 790, 100, 20, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_EMISSION, GetModuleHandle(nullptr), nullptr);
+        
+    CreateWindowA("STATIC", "Strength:", WS_VISIBLE | WS_CHILD,
+        1420, 810, 50, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        
+    m_emissionStrengthEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1470, 810, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_EMISSION_STRENGTH, GetModuleHandle(nullptr), nullptr);
+        
+    CreateWindowA("STATIC", "Color (RGB):", WS_VISIBLE | WS_CHILD,
+        1420, 830, 80, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+        
+    m_emissionColorREdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1420, 845, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_EMISSION_COLOR_R, GetModuleHandle(nullptr), nullptr);
+        
+    m_emissionColorGEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1470, 845, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_EMISSION_COLOR_G, GetModuleHandle(nullptr), nullptr);
+        
+    m_emissionColorBEdit = CreateWindowA("EDIT", "1.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1520, 845, 45, 20, m_hwnd, (HMENU)(LONG_PTR)ID_EMISSION_COLOR_B, GetModuleHandle(nullptr), nullptr);
+
+    // 环境光（ka）RGB输入框
+    CreateWindowA("STATIC", "Ambient (R,G,B):", WS_VISIBLE | WS_CHILD,
+        1470, 200, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_ambientREdit = CreateWindowA("EDIT", "0.15", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1470, 215, 40, 20, m_hwnd, (HMENU)2001, GetModuleHandle(nullptr), nullptr);
+    m_ambientGEdit = CreateWindowA("EDIT", "0.15", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1515, 215, 40, 20, m_hwnd, (HMENU)2002, GetModuleHandle(nullptr), nullptr);
+    m_ambientBEdit = CreateWindowA("EDIT", "0.15", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1560, 215, 40, 20, m_hwnd, (HMENU)2003, GetModuleHandle(nullptr), nullptr);
+    // 漫反射（kd）RGB输入框
+    CreateWindowA("STATIC", "Diffuse (R,G,B):", WS_VISIBLE | WS_CHILD,
+        1470, 240, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_diffuseREdit = CreateWindowA("EDIT", "0.2", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1470, 255, 40, 20, m_hwnd, (HMENU)2004, GetModuleHandle(nullptr), nullptr);
+    m_diffuseGEdit = CreateWindowA("EDIT", "0.2", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1515, 255, 40, 20, m_hwnd, (HMENU)2005, GetModuleHandle(nullptr), nullptr);
+    m_diffuseBEdit = CreateWindowA("EDIT", "0.2", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1560, 255, 40, 20, m_hwnd, (HMENU)2006, GetModuleHandle(nullptr), nullptr);
+    // 高光（ks）RGB输入框
+    CreateWindowA("STATIC", "Specular (R,G,B):", WS_VISIBLE | WS_CHILD,
+        1470, 280, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    m_specularREdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1470, 295, 40, 20, m_hwnd, (HMENU)2007, GetModuleHandle(nullptr), nullptr);
+    m_specularGEdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1515, 295, 40, 20, m_hwnd, (HMENU)2008, GetModuleHandle(nullptr), nullptr);
+    m_specularBEdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
+        1560, 295, 40, 20, m_hwnd, (HMENU)2009, GetModuleHandle(nullptr), nullptr);
 }
 
 void RenderWindow::Run() {
@@ -584,6 +622,9 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnBRDFParameterChanged();
             } else if (controlId >= ID_F0_R && controlId <= ID_F0_B) {
                 OnBRDFParameterChanged();
+            } else if (controlId == ID_EMISSION_STRENGTH || 
+                      controlId >= ID_EMISSION_COLOR_R && controlId <= ID_EMISSION_COLOR_B) {
+                OnEmissionChanged();
             }
         } else if (HIWORD(wParam) == BN_CLICKED) {
             int controlId = LOWORD(wParam);
@@ -625,6 +666,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                        controlId == ID_DISPLACEMENT_FREQ || controlId == ID_SPINE_LENGTH ||
                        controlId == ID_SPINE_SHARPNESS) {
                 OnDisplacementChanged();
+            } else if (controlId == ID_TOGGLE_EMISSION) {
+                OnEmissionChanged();
             }
         }
         return 0;
@@ -855,22 +898,31 @@ void RenderWindow::OnLight2Changed() {
 }
 
 void RenderWindow::OnLightingChanged() {
-    // Get lighting coefficient values from edit controls
     char buffer[32];
-    
-    GetWindowTextA(m_diffuseEdit, buffer, sizeof(buffer));
-    m_diffuseStrength = static_cast<float>(atof(buffer));
-    
-    GetWindowTextA(m_specularEdit, buffer, sizeof(buffer));
-    m_specularStrength = static_cast<float>(atof(buffer));
-    
-    GetWindowTextA(m_ambientEdit, buffer, sizeof(buffer));
-    m_ambientStrength = static_cast<float>(atof(buffer));
-    
-    // 新增：读取shininess参数
-    GetWindowTextA(m_shininessEdit, buffer, sizeof(buffer));
-    m_shininess = static_cast<float>(atof(buffer));
-    
+    // 环境光ka
+    GetWindowTextA(m_ambientREdit, buffer, sizeof(buffer));
+    float kaR = static_cast<float>(atof(buffer));
+    GetWindowTextA(m_ambientGEdit, buffer, sizeof(buffer));
+    float kaG = static_cast<float>(atof(buffer));
+    GetWindowTextA(m_ambientBEdit, buffer, sizeof(buffer));
+    float kaB = static_cast<float>(atof(buffer));
+    m_renderer->setAmbientStrength(Vec3f(kaR, kaG, kaB));
+    // 漫反射kd
+    GetWindowTextA(m_diffuseREdit, buffer, sizeof(buffer));
+    float kdR = static_cast<float>(atof(buffer));
+    GetWindowTextA(m_diffuseGEdit, buffer, sizeof(buffer));
+    float kdG = static_cast<float>(atof(buffer));
+    GetWindowTextA(m_diffuseBEdit, buffer, sizeof(buffer));
+    float kdB = static_cast<float>(atof(buffer));
+    m_renderer->setDiffuseStrength(Vec3f(kdR, kdG, kdB));
+    // 高光ks
+    GetWindowTextA(m_specularREdit, buffer, sizeof(buffer));
+    float ksR = static_cast<float>(atof(buffer));
+    GetWindowTextA(m_specularGEdit, buffer, sizeof(buffer));
+    float ksG = static_cast<float>(atof(buffer));
+    GetWindowTextA(m_specularBEdit, buffer, sizeof(buffer));
+    float ksB = static_cast<float>(atof(buffer));
+    m_renderer->setSpecularStrength(Vec3f(ksR, ksG, ksB));
     UpdateRender();
 }
 
@@ -1506,4 +1558,28 @@ void RenderWindow::UpdateCameraRotationLabel() {
     char buf[128];
     sprintf_s(buf, sizeof(buf), "Roll: %.1f  Pitch: %.1f  Yaw: %.1f", m_cameraRollX, m_cameraRollY, m_cameraRollZ);
     SetWindowTextA(m_cameraRotationLabel, buf);
+}
+
+void RenderWindow::OnEmissionChanged() {
+    // 获取自发光开关状态
+    bool isEnabled = (SendMessage(m_toggleEmissionBtn, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    m_renderer->setEmissionEnabled(isEnabled);
+    
+    // 获取自发光强度
+    char buffer[32];
+    GetWindowTextA(m_emissionStrengthEdit, buffer, sizeof(buffer));
+    float strength = std::atof(buffer);
+    m_renderer->setEmissionStrength(strength);
+    
+    // 获取自发光颜色
+    GetWindowTextA(m_emissionColorREdit, buffer, sizeof(buffer));
+    float r = std::atof(buffer);
+    GetWindowTextA(m_emissionColorGEdit, buffer, sizeof(buffer));
+    float g = std::atof(buffer);
+    GetWindowTextA(m_emissionColorBEdit, buffer, sizeof(buffer));
+    float b = std::atof(buffer);
+    m_renderer->setEmissionColor(Vec3f(r, g, b));
+    
+    // 更新渲染
+    UpdateRender();
 } 

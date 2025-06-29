@@ -86,9 +86,9 @@ private:
     float ambientIntensity;
     
     // 新增：光照系数控制
-    float diffuseStrength;    // 漫反射强度系数
-    float specularStrength;   // 高光强度系数
-    float ambientStrength;    // 环境光强度系数
+    Vec3f diffuseStrength;    // 漫反射强度系数
+    Vec3f specularStrength;   // 高光强度系数
+    Vec3f ambientStrength;    // 环境光强度系数
     float shininess;          // 新增：高光指数（控制高光集中程度）
     
     // 新增：绘制控制开关
@@ -123,6 +123,11 @@ private:
     float m_displacementFrequency; // 位移频率
     float m_spineLength;          // 刺的长度
     float m_spineSharpness;       // 刺的锐利度
+    
+    // 新增：自发光参数
+    bool m_enableEmission;       // 自发光启用开关
+    float m_emissionStrength;    // 自发光强度
+    Vec3f m_emissionColor;       // 自发光颜色
     
     // 新增：计算海胆刺位移
     Vec3f calculateSeaUrchinDisplacement(const Vec3f& position, const Vec3f& normal) const;
@@ -168,13 +173,13 @@ public:
     void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
     
     // 新增：光照系数控制方法
-    void setDiffuseStrength(float strength) { diffuseStrength = strength; }
-    void setSpecularStrength(float strength) { specularStrength = strength; }
-    void setAmbientStrength(float strength) { ambientStrength = strength; }
+    void setDiffuseStrength(const Vec3f& strength) { diffuseStrength = strength; }
+    void setSpecularStrength(const Vec3f& strength) { specularStrength = strength; }
+    void setAmbientStrength(const Vec3f& strength) { ambientStrength = strength; }
     void setShininess(float value) { shininess = value; }  // 新增：设置高光指数
-    float getDiffuseStrength() const { return diffuseStrength; }
-    float getSpecularStrength() const { return specularStrength; }
-    float getAmbientStrength() const { return ambientStrength; }
+    Vec3f getDiffuseStrength() const { return diffuseStrength; }
+    Vec3f getSpecularStrength() const { return specularStrength; }
+    Vec3f getAmbientStrength() const { return ambientStrength; }
     float getShininess() const { return shininess; }  // 新增：获取高光指数
     
     // 新增：设置绘制控制开关
@@ -208,6 +213,14 @@ public:
     bool isEnergyCompensationEnabled() const { return m_enableEnergyCompensation; }
     void setEnergyCompensationScale(float scale) { m_energyCompensationScale = std::max(0.0f, std::min(2.0f, scale)); }
     float getEnergyCompensationScale() const { return m_energyCompensationScale; }
+    
+    // 新增：自发光控制方法
+    void setEmissionEnabled(bool enabled) { m_enableEmission = enabled; }
+    bool isEmissionEnabled() const { return m_enableEmission; }
+    void setEmissionStrength(float strength) { m_emissionStrength = std::max(0.0f, strength); }
+    float getEmissionStrength() const { return m_emissionStrength; }
+    void setEmissionColor(const Vec3f& color) { m_emissionColor = color; }
+    Vec3f getEmissionColor() const { return m_emissionColor; }
     
     // 新增：位移着色器控制方法
     void setDisplacementEnabled(bool enabled) { m_enableDisplacement = enabled; }
@@ -353,4 +366,12 @@ private:
     float computeEnergyIntegral(float roughness, float cosTheta) const;
     Vec3f calculateEnergyCompensationTerm(const Vec3f& N, const Vec3f& V, const Vec3f& L, 
                                           float roughness, const Vec3f& F0) const;
+    
+    // 新增：面材质参数渲染支持
+    void renderTriangleWithFaceIdx(const Vertex& v0, const Vertex& v1, const Vertex& v2, int faceIdx, const Model* pModel);
+    void rasterizeTriangleWithFaceIdx(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel);
+    Color fragmentShaderWithFaceIdx(const struct LocalShaderFragment& fragment, const Model* pModel);
+    Vec3f calculateLightingWithParams(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& ka, const Vec3f& kd, const Vec3f& ks, const Vec3f& emissionColor);
+    Vec3f calculateSingleLightWithParams(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& kd, const Vec3f& ks);
+    void setPixelAlpha(int x, int y, const Color& src, float depth, float alpha);
 }; 

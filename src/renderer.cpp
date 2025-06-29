@@ -69,9 +69,9 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     
     // 初始化多光源系统
     ambientIntensity = 0.2f;    // 环境光强度
-    diffuseStrength = 1.0f;     // 漫反射强度
-    specularStrength = 1.0f;    // 高光强度
-    ambientStrength = 1.0f;     // 环境光强度
+    diffuseStrength = Vec3f(1.0f, 1.0f, 1.0f);     // 漫反射强度
+    specularStrength = Vec3f(1.0f, 1.0f, 1.0f);    // 高光强度
+    ambientStrength = Vec3f(1.0f, 1.0f, 1.0f);     // 环境光强度
     shininess = 32.0f;          // 新增：高光指数初始化
     
     // 添加默认光源
@@ -107,6 +107,11 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     m_displacementFrequency = 8.0f;      // 默认位移频率
     m_spineLength = 0.2f;                // 默认刺长度
     m_spineSharpness = 2.0f;             // 默认刺锐利度
+    
+    // 新增：初始化自发光参数
+    m_enableEmission = false;            // 默认关闭自发光
+    m_emissionStrength = 1.0f;           // 默认自发光强度
+    m_emissionColor = Vec3f(1.0f, 1.0f, 1.0f);  // 默认白色自发光
     
     // 初始化法向量变换矩阵
     updateNormalMatrix();
@@ -207,7 +212,7 @@ void Renderer::renderModel(const Model& model) {
         m_threadPool->enqueue([this, &model, i]() {
             Vertex v0, v1, v2;
             model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-            renderTriangle(v0, v1, v2);
+            renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
         });
     }
     m_threadPool->waitAll();
@@ -385,7 +390,7 @@ void Renderer::downsampleFromHighRes() {
     }
 }
 
-void Renderer::renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& v2) {
+void Renderer::renderTriangleWithFaceIdx(const Vertex& v0, const Vertex& v1, const Vertex& v2, int faceIdx, const Model* pModel) {
     ShaderVertex sv0 = vertexShader(v0);
     ShaderVertex sv1 = vertexShader(v1);
     ShaderVertex sv2 = vertexShader(v2);
@@ -398,14 +403,8 @@ void Renderer::renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& 
     Vec3f viewPos1 = viewMatrix * worldPos1;
     Vec3f viewPos2 = viewMatrix * worldPos2;
     
-    if (!isFrontFace(viewPos0, viewPos1, viewPos2)) {
-        return;
-    }
-    
-    // 渲染三角形面
-    rasterizeTriangle(sv0, sv1, sv2);
-    
-    // 绘制三角形边线（根据开关决定）
+    if (!isFrontFace(viewPos0, viewPos1, viewPos2)) return;
+    rasterizeTriangleWithFaceIdx(sv0, sv1, sv2, faceIdx, pModel);
     if (m_drawTriangleEdges) {
         drawTriangleEdges(sv0, sv1, sv2);
     }
@@ -481,6 +480,13 @@ Color Renderer::fragmentShader(const ShaderFragment& fragment) {
     } else {
         // 使用传统 Phong 光照模型
         finalColor = calculateLighting(fragment.localPos, normal, baseColor);
+    }
+    
+    // 添加自发光计算
+    if (m_enableEmission) {
+        // 将自发光颜色与强度相乘，然后添加到最终颜色中
+        Vec3f emission = m_emissionColor * m_emissionStrength;
+        finalColor = finalColor + emission * baseColor;  // 使用基础颜色调制自发光
     }
     
     return Color::fromVec3f(finalColor);
@@ -1618,5 +1624,157 @@ Vec3f Renderer::calculateSeaUrchinDisplacement(const Vec3f& position, const Vec3
     
     // 沿法线方向位移
     return normal * displacement;
+}
+
+// 片段着色器结构体（本文件内部扩展）
+struct LocalShaderFragment {
+    Vec3f position;
+    Vec3f normal;
+    Vec2f texCoord;
+    Vec3f worldPos;
+    Vec3f localPos;
+    Vec3f localNormal;
+    int faceIndex = -1;
+    float alpha = 1.0f;
+};
+
+// 新增：带face index的渲染流程
+void Renderer::rasterizeTriangleWithFaceIdx(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel) {
+    float x0 = v0.position.x;
+    float y0 = v0.position.y;
+    float x1 = v1.position.x;
+    float y1 = v1.position.y;
+    float x2 = v2.position.x;
+    float y2 = v2.position.y;
+    int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
+    int maxX = std::min(width - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
+    int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
+    int maxY = std::min(height - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
+    float faceAlpha = 1.0f;
+    if (pModel && faceIdx >= 0) faceAlpha = pModel->getFaceAlpha(faceIdx);
+    for (int y = minY; y <= maxY; y++) {
+        for (int x = minX; x <= maxX; x++) {
+            Vec3f bary = barycentric(Vec2f(x0, y0), Vec2f(x1, y1), Vec2f(x2, y2), Vec2f(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f));
+            if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
+                float depth = bary.x * v0.position.z + bary.y * v1.position.z + bary.z * v2.position.z;
+                if (depthTest(x, y, depth)) {
+                    LocalShaderFragment fragment;
+                    fragment.position = v0.position * bary.x + v1.position * bary.y + v2.position * bary.z;
+                    fragment.normal = v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z;
+                    fragment.texCoord = v0.texCoord * bary.x + v1.texCoord * bary.y + v2.texCoord * bary.z;
+                    fragment.worldPos = v0.worldPos * bary.x + v1.worldPos * bary.y + v2.worldPos * bary.z;
+                    fragment.localPos = v0.localPos * bary.x + v1.localPos * bary.y + v2.localPos * bary.z;
+                    fragment.localNormal = v0.localNormal * bary.x + v1.localNormal * bary.y + v2.localNormal * bary.z;
+                    fragment.normal = fragment.normal.normalize();
+                    fragment.localNormal = fragment.localNormal.normalize();
+                    fragment.faceIndex = faceIdx;
+                    fragment.alpha = faceAlpha;
+                    Color color = fragmentShaderWithFaceIdx(fragment, pModel);
+                    setPixelAlpha(x, y, color, depth, fragment.alpha);
+                }
+            }
+        }
+    }
+}
+
+// 新增：带face index的fragmentShader
+Color Renderer::fragmentShaderWithFaceIdx(const LocalShaderFragment& fragment, const Model* pModel) {
+    Vec3f baseColor(1, 1, 1);
+    if (m_enableTexture && currentTexture && currentTexture->isValid()) {
+        baseColor = currentTexture->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
+    }
+    Vec3f normal = fragment.localNormal;
+    if (m_enableNormalMap && currentNormalMap && currentNormalMap->isValid()) {
+        Vec3f normalMapSample = currentNormalMap->sampleVec3f(fragment.texCoord.x, fragment.texCoord.y);
+        Vec3f tangentSpaceNormal = normalMapSample * 2.0f - Vec3f(1.0f, 1.0f, 1.0f);
+        Vec3f N = fragment.localNormal.normalize();
+        Vec3f up = (std::abs(N.y) < 0.9f) ? Vec3f(0, 1, 0) : Vec3f(1, 0, 0);
+        Vec3f T = up.cross(N).normalize();
+        Vec3f B = N.cross(T);
+        normal = T * tangentSpaceNormal.x + B * tangentSpaceNormal.y + N * tangentSpaceNormal.z;
+        normal = normal.normalize();
+    }
+    Vec3f finalColor;
+    if (!m_enableNormalMap && !m_enableBRDF) {
+        // 仅Phong模型下，优先用缓存参数
+        Vec3f ka = Vec3f(-1, -1, -1);
+        Vec3f kd(-1,-1,-1), ks(-1,-1,-1), ke(-1,-1,-1);
+        if (pModel && fragment.faceIndex >= 0) {
+            ka = pModel->getFaceKa(fragment.faceIndex);
+            kd = pModel->getFaceKd(fragment.faceIndex);
+            ks = pModel->getFaceKs(fragment.faceIndex);
+            ke = pModel->getFaceKe(fragment.faceIndex);
+        }
+        Vec3f useKa = (ka.x >= 0 && ka.y >= 0 && ka.z >= 0) ? ka : ambientStrength;
+        Vec3f useKd = (kd.x >= 0 && kd.y >= 0 && kd.z >= 0) ? kd : diffuseStrength;
+        Vec3f useKs = (ks.x >= 0 && ks.y >= 0 && ks.z >= 0) ? ks : specularStrength;
+        Vec3f useKe = (ke.x >= 0 && ke.y >= 0 && ke.z >= 0) ? ke : (m_enableEmission ? m_emissionColor * m_emissionStrength : Vec3f(0,0,0));
+        finalColor = calculateLightingWithParams(fragment.localPos, normal, baseColor, useKa, useKd, useKs, useKe);
+    } else if (!m_enableNormalMap && m_enableBRDF) {
+        finalColor = calculateBRDFLighting(fragment.localPos, normal, baseColor);
+    } else {
+        finalColor = calculateLighting(fragment.localPos, normal, baseColor);
+    }
+    return Color::fromVec3f(finalColor);
+}
+
+// 新增：带参数的calculateLighting
+Vec3f Renderer::calculateLightingWithParams(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& ka, const Vec3f& kd, const Vec3f& ks, const Vec3f& emissionColor) {
+    Vec3f ambient = baseColor * (ambientIntensity * ka);
+    Vec3f totalLighting = ambient;
+    for (const auto& light : lights) {
+        if (light.enabled) {
+            totalLighting += calculateSingleLightWithParams(light, localPos, localNormal, baseColor, kd, ks);
+        }
+    }
+    totalLighting += emissionColor;
+    return totalLighting;
+}
+
+// 新增：带参数的单光源光照
+Vec3f Renderer::calculateSingleLightWithParams(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& kd, const Vec3f& ks) {
+    Vec3f lightDir;
+    float attenuation;
+    if (light.type == LightType::DIRECTIONAL) {
+        lightDir = -light.position.normalize();
+        attenuation = light.intensity;
+    } else {
+        Vec3f lightVector = light.position - localPos;
+        float distance = lightVector.length();
+        lightDir = lightVector.normalize();
+        float r_squared = distance * distance;
+        attenuation = light.intensity / r_squared;
+    }
+    float diffuseIntensity = std::max(0.0f, localNormal.dot(lightDir));
+    Vec3f diffuse = baseColor * light.color * diffuseIntensity * attenuation;
+    diffuse = Vec3f(diffuse.x * kd.x, diffuse.y * kd.y, diffuse.z * kd.z);
+    Vec3f specular(0, 0, 0);
+    if (diffuseIntensity > 0.0f) {
+        Vec3f worldCameraPos = VectorMath::inverse(viewMatrix) * Vec3f(0, 0, 0);
+        Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
+        Vec3f localCameraPos = invModelMatrix * worldCameraPos;
+        Vec3f localViewDir = (localCameraPos - localPos).normalize();
+        Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;
+        reflectDir = reflectDir.normalize();
+        float specularIntensity = std::pow(std::max(0.0f, localViewDir.dot(reflectDir)), this->shininess);
+        specular = light.color * specularIntensity * attenuation;
+        specular = Vec3f(specular.x * ks.x, specular.y * ks.y, specular.z * ks.z);
+    }
+    return diffuse + specular;
+}
+
+// 新增：带alpha混合的setPixel
+void Renderer::setPixelAlpha(int x, int y, const Color& src, float depth, float alpha) {
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    int index = y * width + x;
+    Color dst = frameBuffer[index].color;
+    float a = std::max(0.0f, std::min(1.0f, alpha));
+    Color out;
+    out.r = static_cast<unsigned char>(src.r * a + dst.r * (1 - a));
+    out.g = static_cast<unsigned char>(src.g * a + dst.g * (1 - a));
+    out.b = static_cast<unsigned char>(src.b * a + dst.b * (1 - a));
+    out.a = 255;
+    frameBuffer[index].color = out;
+    frameBuffer[index].depth = depth;
 }
 

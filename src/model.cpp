@@ -3,8 +3,13 @@
 #include <sstream>
 #include <iostream>
 #include <algorithm>
+#include <unordered_map>
+#include <array>
+
+Model::Model() {}
 
 bool Model::loadFromFile(const std::string& filename) {
+    faceKa.clear(); faceKd.clear(); faceKs.clear(); faceKe.clear(); faceAlpha.clear();
     if (!parseOBJ(filename)) {
         std::cerr << "Failed to load model: " << filename << std::endl;
         return false;
@@ -20,62 +25,83 @@ bool Model::parseOBJ(const std::string& filename) {
         std::cerr << "Cannot open file: " << filename << std::endl;
         return false;
     }
-    
+    // 材质名到ka/kd/ks/ke/alpha
+    struct MtlParams { Vec3f ka, kd, ks, ke; float alpha; MtlParams():ka(-1,-1,-1),kd(-1,-1,-1),ks(-1,-1,-1),ke(-1,-1,-1),alpha(1.0f){} };
+    std::unordered_map<std::string, MtlParams> mtlParams;
+    std::string currentMtl;
+    std::string mtlFile;
+    std::string objDir;
+    size_t slash = filename.find_last_of("/\\");
+    if (slash != std::string::npos) objDir = filename.substr(0, slash+1);
+    // 先扫描OBJ
     std::string line;
     while (std::getline(file, line)) {
         std::istringstream iss(line);
         std::string token;
         iss >> token;
-        
-        if (token == "v") {
-            // 顶点
-            float x, y, z;
-            iss >> x >> y >> z;
+        if (token == "mtllib") {
+            iss >> mtlFile;
+            if (!objDir.empty() && mtlFile.find(objDir) != 0) mtlFile = objDir + mtlFile;
+            // 解析MTL
+            std::ifstream mtl(mtlFile);
+            if (mtl.is_open()) {
+                std::string mline, mtlName;
+                MtlParams params;
+                while (std::getline(mtl, mline)) {
+                    std::istringstream miss(mline);
+                    std::string mtoken;
+                    miss >> mtoken;
+                    if (mtoken == "newmtl") {
+                        if (!mtlName.empty()) mtlParams[mtlName] = params;
+                        miss >> mtlName;
+                        params = MtlParams();
+                    } else if (mtoken == "Ka") {
+                        float r=1,g=1,b=1; miss >> r >> g >> b; params.ka = Vec3f(r,g,b);
+                    } else if (mtoken == "Kd") {
+                        float r=1,g=1,b=1; miss >> r >> g >> b; params.kd = Vec3f(r,g,b);
+                    } else if (mtoken == "Ks") {
+                        float r=1,g=1,b=1; miss >> r >> g >> b; params.ks = Vec3f(r,g,b);
+                    } else if (mtoken == "Ke") {
+                        float r=0,g=0,b=0; miss >> r >> g >> b; params.ke = Vec3f(r,g,b);
+                    } else if (mtoken == "d") {
+                        float v; miss >> v; params.alpha = v;
+                    }
+                }
+                if (!mtlName.empty()) mtlParams[mtlName] = params;
+                mtl.close();
+            }
+        } else if (token == "usemtl") {
+            iss >> currentMtl;
+        } else if (token == "v") {
+            float x, y, z; iss >> x >> y >> z;
             vertices.push_back(Vec3f(x, y, z));
-        }
-        else if (token == "vn") {
-            // 法向量
-            float x, y, z;
-            iss >> x >> y >> z;
+        } else if (token == "vn") {
+            float x, y, z; iss >> x >> y >> z;
             normals.push_back(Vec3f(x, y, z));
-        }
-        else if (token == "vt") {
-            // 纹理坐标
-            float u, v;
-            iss >> u >> v;
+        } else if (token == "vt") {
+            float u, v; iss >> u >> v;
             texCoords.push_back(Vec2f(u, v));
-        }
-        else if (token == "f") {
-            // 面
-            Face face;
-            std::string vertex;
-            
+        } else if (token == "f") {
+            Face face; std::string vertex;
             for (int i = 0; i < 3; i++) {
                 iss >> vertex;
                 std::istringstream viss(vertex);
                 std::string index;
-                
-                // 解析顶点索引
                 std::getline(viss, index, '/');
-                if (!index.empty()) {
-                    face.vertices[i] = std::stoi(index) - 1;
-                }
-                
-                // 解析纹理坐标索引
-                if (std::getline(viss, index, '/') && !index.empty()) {
-                    face.texCoords[i] = std::stoi(index) - 1;
-                }
-                
-                // 解析法向量索引
-                if (std::getline(viss, index, '/') && !index.empty()) {
-                    face.normals[i] = std::stoi(index) - 1;
-                }
+                if (!index.empty()) face.vertices[i] = std::stoi(index) - 1;
+                if (std::getline(viss, index, '/') && !index.empty()) face.texCoords[i] = std::stoi(index) - 1;
+                if (std::getline(viss, index, '/') && !index.empty()) face.normals[i] = std::stoi(index) - 1;
             }
-            
             faces.push_back(face);
+            // 分配ka/kd/ks/ke/alpha
+            Vec3f ka(-1,-1,-1),kd(-1,-1,-1),ks(-1,-1,-1),ke(-1,-1,-1); float alpha=1.0f;
+            auto it = mtlParams.find(currentMtl);
+            if (it != mtlParams.end()) {
+                ka = it->second.ka; kd = it->second.kd; ks = it->second.ks; ke = it->second.ke; alpha = it->second.alpha;
+            }
+            faceKa.push_back(ka); faceKd.push_back(kd); faceKs.push_back(ks); faceKe.push_back(ke); faceAlpha.push_back(alpha);
         }
     }
-    
     file.close();
     return true;
 }
@@ -170,4 +196,25 @@ void Model::scaleModel(float scale) {
     
     // 重新处理顶点
     processVertices();
+}
+
+Vec3f Model::getFaceKa(int faceIdx) const {
+    if (faceIdx >= 0 && faceIdx < faceKa.size()) return faceKa[faceIdx];
+    return Vec3f(-1,-1,-1);
+}
+Vec3f Model::getFaceKd(int faceIdx) const {
+    if (faceIdx >= 0 && faceIdx < faceKd.size()) return faceKd[faceIdx];
+    return Vec3f(-1,-1,-1);
+}
+Vec3f Model::getFaceKs(int faceIdx) const {
+    if (faceIdx >= 0 && faceIdx < faceKs.size()) return faceKs[faceIdx];
+    return Vec3f(-1,-1,-1);
+}
+Vec3f Model::getFaceKe(int faceIdx) const {
+    if (faceIdx >= 0 && faceIdx < faceKe.size()) return faceKe[faceIdx];
+    return Vec3f(-1,-1,-1);
+}
+float Model::getFaceAlpha(int faceIdx) const {
+    if (faceIdx >= 0 && faceIdx < faceAlpha.size()) return faceAlpha[faceIdx];
+    return 1.0f;
 } 
