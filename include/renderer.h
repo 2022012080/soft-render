@@ -197,6 +197,9 @@ private:
     
     std::unique_ptr<ThreadPool> m_threadPool;
     
+    // 前向声明内部 ShaderVertex 以便后续成员函数参数可用
+    struct ShaderVertex;
+    
 public:
     Renderer(int w, int h);
     
@@ -339,6 +342,14 @@ public:
     
     // 新增：绘制光线到模型顶点
     void drawLightRays(const Model& model);
+    
+    // SSAA 多重采样解析（将高分辨率缓冲区降采样到常规帧缓冲）
+    void resolveSSAAToFrameBuffer();
+    
+    // 渲染到高分辨率缓冲区（带面索引/Alpha 支持）
+    void renderTriangleHighResWithFaceIdx(const Vertex& v0, const Vertex& v1, const Vertex& v2, int faceIdx, const Model* pModel);
+    void rasterizeTriangleHighResWithFaceIdx(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel);
+    void setPixelHighResAlpha(int x, int y, const Color& src, float depth, float alpha);
     
 private:
     // 顶点着色器

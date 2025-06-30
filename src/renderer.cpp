@@ -340,14 +340,31 @@ void Renderer::clearDepth() {
 void Renderer::renderModel(const Model& model) {
     size_t faceCount = model.getFaceCount();
     if (faceCount == 0) return;
-    for (size_t i = 0; i < faceCount; ++i) {
-        m_threadPool->enqueue([this, &model, i]() {
-            Vertex v0, v1, v2;
-            model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-            renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
-        });
+
+    if (m_enableSSAA) {
+        Matrix4x4 originalViewport = viewportMatrix;
+        viewportMatrix = createHighResViewportMatrix();
+
+        for (size_t i = 0; i < faceCount; ++i) {
+            m_threadPool->enqueue([this, &model, i]() {
+                Vertex v0, v1, v2;
+                model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+                renderTriangleHighResWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+            });
+        }
+        m_threadPool->waitAll();
+        viewportMatrix = originalViewport;
+    } else {
+        // 原有路径：支持 MSAA/普通
+        for (size_t i = 0; i < faceCount; ++i) {
+            m_threadPool->enqueue([this, &model, i]() {
+                Vertex v0, v1, v2;
+                model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+                renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+            });
+        }
+        m_threadPool->waitAll();
     }
-    m_threadPool->waitAll();
 }
 
 void Renderer::renderToHighRes(const Model& model) {
@@ -2002,5 +2019,88 @@ void Renderer::rasterizeTriangleMSAA(const ShaderVertex& v0, const ShaderVertex&
             }
         }
     }
+}
+
+// ======== SSAA 相关新增实现 ========
+
+// Alpha 混合写入高分辨率缓冲区
+void Renderer::setPixelHighResAlpha(int x, int y, const Color& src, float depth, float alpha) {
+    if (x < 0 || x >= m_highResWidth || y < 0 || y >= m_highResHeight) return;
+    int index = y * m_highResWidth + x;
+    Color dst = m_highResFrameBuffer[index].color;
+    float a = std::max(0.0f, std::min(1.0f, alpha));
+    Color out;
+    out.r = static_cast<unsigned char>(src.r * a + dst.r * (1.0f - a));
+    out.g = static_cast<unsigned char>(src.g * a + dst.g * (1.0f - a));
+    out.b = static_cast<unsigned char>(src.b * a + dst.b * (1.0f - a));
+    out.a = 255;
+    m_highResFrameBuffer[index].color = out;
+    m_highResFrameBuffer[index].depth = depth;
+}
+
+// 高分辨率栅格化（支持面索引/透明度）
+void Renderer::rasterizeTriangleHighResWithFaceIdx(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel) {
+    float x0 = v0.position.x, y0 = v0.position.y;
+    float x1 = v1.position.x, y1 = v1.position.y;
+    float x2 = v2.position.x, y2 = v2.position.y;
+
+    int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
+    int maxX = std::min(m_highResWidth - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
+    int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
+    int maxY = std::min(m_highResHeight - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
+
+    for (int y = minY; y <= maxY; ++y) {
+        for (int x = minX; x <= maxX; ++x) {
+            Vec3f bary = barycentric(Vec2f(x0, y0), Vec2f(x1, y1), Vec2f(x2, y2),
+                                     Vec2f(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f));
+            if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
+                float depth = bary.x * v0.position.z + bary.y * v1.position.z + bary.z * v2.position.z;
+                if (depthTestHighRes(x, y, depth)) {
+                    LocalShaderFragment fragment;
+                    fragment.position     = v0.position * bary.x + v1.position * bary.y + v2.position * bary.z;
+                    fragment.normal       = v0.normal   * bary.x + v1.normal   * bary.y + v2.normal   * bary.z;
+                    fragment.texCoord     = v0.texCoord * bary.x + v1.texCoord * bary.y + v2.texCoord * bary.z;
+                    fragment.worldPos     = v0.worldPos * bary.x + v1.worldPos * bary.y + v2.worldPos * bary.z;
+                    fragment.localPos     = v0.localPos * bary.x + v1.localPos * bary.y + v2.localPos * bary.z;
+                    fragment.localNormal  = v0.localNormal * bary.x + v1.localNormal * bary.y + v2.localNormal * bary.z;
+                    fragment.normal = fragment.normal.normalize();
+                    fragment.localNormal = fragment.localNormal.normalize();
+                    fragment.faceIndex = faceIdx;
+                    float faceAlpha = 1.0f;
+                    if (pModel && faceIdx >= 0) {
+                        faceAlpha = pModel->getFaceAlpha(faceIdx);
+                    }
+                    fragment.alpha = faceAlpha;
+                    Color srcColor = fragmentShaderWithFaceIdx(fragment, pModel);
+                    setPixelHighResAlpha(x, y, srcColor, depth, fragment.alpha);
+                }
+            }
+        }
+    }
+}
+
+void Renderer::renderTriangleHighResWithFaceIdx(const Vertex& v0, const Vertex& v1, const Vertex& v2, int faceIdx, const Model* pModel) {
+    ShaderVertex sv0 = vertexShader(v0);
+    ShaderVertex sv1 = vertexShader(v1);
+    ShaderVertex sv2 = vertexShader(v2);
+
+    Vec3f worldPos0 = modelMatrix * v0.position;
+    Vec3f worldPos1 = modelMatrix * v1.position;
+    Vec3f worldPos2 = modelMatrix * v2.position;
+    Vec3f viewPos0  = viewMatrix * worldPos0;
+    Vec3f viewPos1  = viewMatrix * worldPos1;
+    Vec3f viewPos2  = viewMatrix * worldPos2;
+    if (!isFrontFace(viewPos0, viewPos1, viewPos2)) return;
+
+    rasterizeTriangleHighResWithFaceIdx(sv0, sv1, sv2, faceIdx, pModel);
+    if (m_drawTriangleEdges) {
+        drawTriangleEdgesHighRes(sv0, sv1, sv2);
+    }
+}
+
+// 将高分辨率缓冲区降采样到常规帧缓冲
+void Renderer::resolveSSAAToFrameBuffer() {
+    if (!m_enableSSAA) return;
+    downsampleFromHighRes();
 }
 

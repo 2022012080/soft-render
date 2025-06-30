@@ -1093,6 +1093,11 @@ void RenderWindow::UpdateRender() {
         m_renderer->resolveMSAAToFrameBuffer();
     }
     
+    // 如果启用了SSAA，将高分辨率缓冲区降采样到常规帧缓冲
+    if (m_renderer->isSSAAEnabled()) {
+        m_renderer->resolveSSAAToFrameBuffer();
+    }
+    
     RenderToWindow();
 
     // 帧率统计
