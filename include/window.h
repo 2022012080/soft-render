@@ -91,6 +91,14 @@ public:
     HWND m_diffuseREdit, m_diffuseGEdit, m_diffuseBEdit;
     HWND m_specularREdit, m_specularGEdit, m_specularBEdit;
     
+    // 帧率显示控件
+    HWND m_fpsLabel;
+    
+    // 帧率统计变量
+    DWORD m_lastFPSTime;
+    int   m_frameCount;
+    float m_currentFPS;
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);

@@ -1978,8 +1978,20 @@ void Renderer::rasterizeTriangleMSAA(const ShaderVertex& v0, const ShaderVertex&
                             }
                             fragment.alpha = faceAlpha;
                             
-                            // 执行片段着色器
-                            sample.color = fragmentShaderWithFaceIdx(fragment, pModel);
+                            // 执行片段着色器并获取源颜色
+                            Color srcColor = fragmentShaderWithFaceIdx(fragment, pModel);
+                
+                            // Alpha 混合：与非 MSAA 路径一致
+                            float a = std::max(0.0f, std::min(1.0f, fragment.alpha));
+                
+                            Color dstColor = sample.color; // 采样点当前颜色（背景或先前片段）
+                            Color outColor;
+                            outColor.r = static_cast<unsigned char>(srcColor.r * a + dstColor.r * (1.0f - a));
+                            outColor.g = static_cast<unsigned char>(srcColor.g * a + dstColor.g * (1.0f - a));
+                            outColor.b = static_cast<unsigned char>(srcColor.b * a + dstColor.b * (1.0f - a));
+                            outColor.a = 255;
+                
+                            sample.color = outColor;
                         }
                     }
                 }

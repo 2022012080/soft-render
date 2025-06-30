@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <cmath>
+#include <cstdio>
 
 RenderWindow::RenderWindow(int width, int height) 
     : m_windowWidth(width), m_windowHeight(height)
@@ -43,6 +44,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_targetPosition(0.0f, 0.0f, -5.0f)
     , m_moveLerpSpeed(0.15f)
     , m_isMoving(false)
+    , m_fpsLabel(nullptr)
 {
     // 初始化键盘状态数组
     memset(m_keyStates, 0, sizeof(m_keyStates));
@@ -56,6 +58,11 @@ RenderWindow::RenderWindow(int width, int height)
     m_renderer->setEmissionEnabled(false);  // 默认关闭自发光
     m_renderer->setEmissionStrength(1.0f);  // 默认自发光强度
     m_renderer->setEmissionColor(Vec3f(1.0f, 1.0f, 1.0f));  // 默认白色自发光
+    
+    // 初始化帧率统计
+    m_lastFPSTime = GetTickCount();
+    m_frameCount = 0;
+    m_currentFPS = 0.0f;
 }
 
 RenderWindow::~RenderWindow() {
@@ -580,6 +587,10 @@ void RenderWindow::CreateControls() {
         1515, 295, 40, 20, m_hwnd, (HMENU)2008, GetModuleHandle(nullptr), nullptr);
     m_specularBEdit = CreateWindowA("EDIT", "2.0", WS_VISIBLE | WS_CHILD | WS_BORDER,
         1560, 295, 40, 20, m_hwnd, (HMENU)2009, GetModuleHandle(nullptr), nullptr);
+
+    // 帧率显示控件
+    m_fpsLabel = CreateWindowA("STATIC", "FPS: 0", WS_VISIBLE | WS_CHILD,
+        1420, 870, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
 }
 
 void RenderWindow::Run() {
@@ -1079,6 +1090,22 @@ void RenderWindow::UpdateRender() {
     }
     
     RenderToWindow();
+
+    // 帧率统计
+    m_frameCount++;
+    DWORD now = GetTickCount();
+    DWORD elapsed = now - m_lastFPSTime;
+    if (elapsed >= 1000) {
+        m_currentFPS = (float)m_frameCount * 1000.0f / elapsed;
+        m_lastFPSTime = now;
+        m_frameCount = 0;
+
+        char fpsText[32];
+        sprintf_s(fpsText, "FPS: %.1f", m_currentFPS);
+        if (m_fpsLabel) {
+            SetWindowTextA(m_fpsLabel, fpsText);
+        }
+    }
 }
 
 void RenderWindow::RenderToWindow() {
