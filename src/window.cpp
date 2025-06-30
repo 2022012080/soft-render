@@ -172,6 +172,9 @@ bool RenderWindow::Initialize() {
     m_currentModelFile = "Untitled.obj";
     OnLoadModel();
     
+    // 初始化控件状态
+    UpdateMSAAControls();
+    
     // Initial render
     UpdateRender();
     
@@ -355,6 +358,22 @@ void RenderWindow::CreateControls() {
     
     m_ssaaStatusLabel = CreateWindowA("STATIC", "OFF", WS_VISIBLE | WS_CHILD,
         1320, 395, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    // MSAA controls
+    CreateWindowA("STATIC", "MSAA:", WS_VISIBLE | WS_CHILD,
+        1440, 395, 40, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+    
+    m_toggleMSAABtn = CreateWindowA("BUTTON", "OFF", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1440, 410, 35, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_MSAA, GetModuleHandle(nullptr), nullptr);
+    
+    m_msaaSampleDecBtn = CreateWindowA("BUTTON", "-", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1480, 410, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_MSAA_SAMPLE_DEC, GetModuleHandle(nullptr), nullptr);
+    
+    m_msaaSampleIncBtn = CreateWindowA("BUTTON", "+", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1510, 410, 25, 25, m_hwnd, (HMENU)(LONG_PTR)ID_MSAA_SAMPLE_INC, GetModuleHandle(nullptr), nullptr);
+    
+    m_msaaStatusLabel = CreateWindowA("STATIC", "OFF", WS_VISIBLE | WS_CHILD,
+        1540, 395, 100, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
     
     // Model file controls
     CreateWindowA("STATIC", "Model:", WS_VISIBLE | WS_CHILD,
@@ -648,6 +667,12 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnSSAAScaleIncrease();
             } else if (controlId == ID_SSAA_SCALE_DEC) {
                 OnSSAAScaleDecrease();
+            } else if (controlId == ID_TOGGLE_MSAA) {
+                OnToggleMSAA();
+            } else if (controlId == ID_MSAA_SAMPLE_INC) {
+                OnMSAASampleIncrease();
+            } else if (controlId == ID_MSAA_SAMPLE_DEC) {
+                OnMSAASampleDecrease();
             } else if (controlId == ID_LOAD_MODEL) {
                 OnLoadModel();
             } else if (controlId == ID_LOAD_TEXTURE) {
@@ -1048,6 +1073,11 @@ void RenderWindow::UpdateRender() {
         }
     }
     
+    // 如果启用了MSAA，需要解析MSAA缓冲区到常规帧缓冲
+    if (m_renderer->isMSAAEnabled()) {
+        m_renderer->resolveMSAAToFrameBuffer();
+    }
+    
     RenderToWindow();
 }
 
@@ -1247,6 +1277,80 @@ void RenderWindow::UpdateSSAAControls() {
     // 更新按钮状态
     EnableWindow(m_ssaaScaleIncBtn, scale < 8);
     EnableWindow(m_ssaaScaleDecBtn, scale > 2);
+}
+
+void RenderWindow::OnToggleMSAA() {
+    bool currentState = m_renderer->isMSAAEnabled();
+    
+    if (currentState) {
+        m_renderer->disableMSAA();
+        SetWindowTextA(m_toggleMSAABtn, "OFF");
+    } else {
+        m_renderer->enableMSAA(true, m_renderer->getMSAASampleCount());
+        SetWindowTextA(m_toggleMSAABtn, "ON");
+    }
+    
+    UpdateMSAAControls();
+    UpdateRender();
+}
+
+void RenderWindow::OnMSAASampleIncrease() {
+    int currentSampleCount = m_renderer->getMSAASampleCount();
+    if (currentSampleCount < 8) {  // 限制最大8个采样点
+        int newSampleCount = (currentSampleCount == 4) ? 8 : 4;  // 4x -> 8x
+        bool wasEnabled = m_renderer->isMSAAEnabled();
+        
+        if (wasEnabled) {
+            m_renderer->enableMSAA(true, newSampleCount);
+        } else {
+            // 即使未启用，也更新采样数设置
+            m_renderer->enableMSAA(false, newSampleCount);
+        }
+        
+        UpdateMSAAControls();
+        if (wasEnabled) {
+            UpdateRender();
+        }
+    }
+}
+
+void RenderWindow::OnMSAASampleDecrease() {
+    int currentSampleCount = m_renderer->getMSAASampleCount();
+    if (currentSampleCount > 4) {  // 限制最小4个采样点
+        int newSampleCount = 4;  // 8x -> 4x
+        bool wasEnabled = m_renderer->isMSAAEnabled();
+        
+        if (wasEnabled) {
+            m_renderer->enableMSAA(true, newSampleCount);
+        } else {
+            // 即使未启用，也更新采样数设置
+            m_renderer->enableMSAA(false, newSampleCount);
+        }
+        
+        UpdateMSAAControls();
+        if (wasEnabled) {
+            UpdateRender();
+        }
+    }
+}
+
+void RenderWindow::UpdateMSAAControls() {
+    bool isEnabled = m_renderer->isMSAAEnabled();
+    int sampleCount = m_renderer->getMSAASampleCount();
+    
+    // 更新状态标签
+    char statusText[64];
+    if (isEnabled) {
+        sprintf_s(statusText, sizeof(statusText), "ON %dx", sampleCount);
+    } else {
+        sprintf_s(statusText, sizeof(statusText), "OFF %dx", sampleCount);
+    }
+    
+    SetWindowTextA(m_msaaStatusLabel, statusText);
+    
+    // 更新按钮状态
+    EnableWindow(m_msaaSampleIncBtn, sampleCount < 8);
+    EnableWindow(m_msaaSampleDecBtn, sampleCount > 4);
 }
 
 void RenderWindow::OnLoadModel() {

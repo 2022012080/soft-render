@@ -39,6 +39,11 @@ public:
     void OnSSAAScaleIncrease();
     void OnSSAAScaleDecrease();
     
+    // 新增：MSAA控制方法
+    void OnToggleMSAA();
+    void OnMSAASampleIncrease();
+    void OnMSAASampleDecrease();
+    
     // 新增：模型加载方法
     void OnLoadModel();
     
@@ -92,6 +97,7 @@ private:
     
     void CreateControls();
     void UpdateSSAAControls();
+    void UpdateMSAAControls();
     
     // Window handles
     HWND m_hwnd;
@@ -132,6 +138,10 @@ private:
     // 新增：SSAA控制按钮和标签
     HWND m_toggleSSAABtn, m_ssaaScaleIncBtn, m_ssaaScaleDecBtn;
     HWND m_ssaaStatusLabel;
+    
+    // 新增：MSAA控制按钮和标签
+    HWND m_toggleMSAABtn, m_msaaSampleIncBtn, m_msaaSampleDecBtn;
+    HWND m_msaaStatusLabel;
     
     // 新增：模型文件输入控件
     HWND m_modelFileEdit, m_loadModelBtn;
@@ -238,6 +248,11 @@ private:
     static const int ID_TOGGLE_SSAA = 1019;
     static const int ID_SSAA_SCALE_INC = 1020;
     static const int ID_SSAA_SCALE_DEC = 1021;
+    
+    // 新增：MSAA控制ID
+    static const int ID_TOGGLE_MSAA = 1057;
+    static const int ID_MSAA_SAMPLE_INC = 1058;
+    static const int ID_MSAA_SAMPLE_DEC = 1059;
     
     // 新增：第二个光源控制ID
     static const int ID_LIGHT2_X = 1022;

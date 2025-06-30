@@ -19,6 +19,63 @@ struct Pixel {
     Pixel(const Color& c, float d) : color(c), depth(d) {}
 };
 
+// MSAA采样点结构
+struct MSAASample {
+    Color color;
+    float depth;
+    bool covered;  // 是否被三角形覆盖
+    
+    MSAASample() : color(), depth(1.0f), covered(false) {}
+};
+
+// MSAA像素，包含多个采样点
+struct MSAAPixel {
+    std::vector<MSAASample> samples;
+    
+    MSAAPixel(int sampleCount = 4) : samples(sampleCount) {}
+    
+    // 获取最终颜色（所有采样点的平均）
+    Color getFinalColor(const Color& backgroundColor = Color(50, 50, 100)) const {
+        if (samples.empty()) return backgroundColor;
+        
+        float r = 0, g = 0, b = 0;
+        int coveredCount = 0;
+        
+        // 计算覆盖的采样点
+        for (const auto& sample : samples) {
+            if (sample.covered) {
+                r += sample.color.r;
+                g += sample.color.g;
+                b += sample.color.b;
+                coveredCount++;
+            }
+        }
+        
+        if (coveredCount == 0) return backgroundColor;
+        
+        // 如果所有采样点都被覆盖，返回采样点的平均值
+        if (coveredCount == samples.size()) {
+            return Color(
+                static_cast<unsigned char>(r / coveredCount),
+                static_cast<unsigned char>(g / coveredCount),
+                static_cast<unsigned char>(b / coveredCount)
+            );
+        }
+        
+        // 部分覆盖：混合采样点颜色和背景色
+        float coverage = static_cast<float>(coveredCount) / samples.size();
+        float avgR = r / coveredCount;
+        float avgG = g / coveredCount;
+        float avgB = b / coveredCount;
+        
+        return Color(
+            static_cast<unsigned char>(avgR * coverage + backgroundColor.r * (1.0f - coverage)),
+            static_cast<unsigned char>(avgG * coverage + backgroundColor.g * (1.0f - coverage)),
+            static_cast<unsigned char>(avgB * coverage + backgroundColor.b * (1.0f - coverage))
+        );
+    }
+};
+
 // 光源类型枚举
 enum class LightType {
     POINT,      // 点光源
@@ -67,6 +124,12 @@ private:
     std::vector<Pixel> m_highResFrameBuffer;
     std::vector<float> m_highResDepthBuffer;
     int m_highResWidth, m_highResHeight;
+    
+    // MSAA多重采样抗锯齿相关
+    bool m_enableMSAA;
+    int m_msaaSampleCount;  // 每像素采样点数，通常为4或8
+    std::vector<MSAAPixel> m_msaaFrameBuffer;
+    std::vector<Vec2f> m_samplePattern;  // 采样点位置模式
     
     // 变换矩阵
     Matrix4x4 modelMatrix;
@@ -146,6 +209,13 @@ public:
     void disableSSAA();
     bool isSSAAEnabled() const { return m_enableSSAA; }
     int getSSAAScale() const { return m_ssaaScale; }
+    
+    // MSAA多重采样抗锯齿控制
+    void enableMSAA(bool enable, int sampleCount = 4);
+    void disableMSAA();
+    bool isMSAAEnabled() const { return m_enableMSAA; }
+    int getMSAASampleCount() const { return m_msaaSampleCount; }
+    void resolveMSAAToFrameBuffer();
     
     // 设置变换矩阵
     void setModelMatrix(const Matrix4x4& matrix) { 
@@ -302,6 +372,13 @@ private:
     void rasterizeTriangleHighRes(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2);
     bool depthTestHighRes(int x, int y, float depth);
     void setPixelHighRes(int x, int y, const Color& color, float depth);
+    
+    // MSAA相关私有方法
+    void initializeMSAABuffers();
+    void initializeSamplePattern();
+    void renderTriangleMSAA(const Vertex& v0, const Vertex& v1, const Vertex& v2);
+    void rasterizeTriangleMSAA(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel);
+    bool isPointInTriangle(const Vec2f& p, const Vec2f& v0, const Vec2f& v1, const Vec2f& v2);
     
     // 顶点着色器
     ShaderVertex vertexShader(const Vertex& vertex);
