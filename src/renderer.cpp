@@ -344,10 +344,10 @@ void Renderer::resolveMSAAToFrameBuffer() {
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             int index = y * width + x;
-
+            
             Color backgroundColor = frameBuffer[index].color;
             Color finalColor = m_msaaFrameBuffer[index].getFinalColor(backgroundColor);
-
+            
             float minDepth = 1.0f;
             bool hasValidSample = false;
             for (const auto& sample : m_msaaFrameBuffer[index].samples) {
@@ -356,7 +356,7 @@ void Renderer::resolveMSAAToFrameBuffer() {
                     hasValidSample = true;
                 }
             }
-
+            
             frameBuffer[index].color = finalColor;
             if (hasValidSample) {
                 frameBuffer[index].depth = minDepth;
@@ -464,14 +464,14 @@ void Renderer::renderModel(const Model& model) {
         viewportMatrix = originalViewport;
     } else {
         // 原有路径：支持 MSAA/普通
-        for (size_t i = 0; i < faceCount; ++i) {
-            m_threadPool->enqueue([this, &model, i]() {
-                Vertex v0, v1, v2;
-                model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-                renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
-            });
-        }
-        m_threadPool->waitAll();
+    for (size_t i = 0; i < faceCount; ++i) {
+        m_threadPool->enqueue([this, &model, i]() {
+            Vertex v0, v1, v2;
+            model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+            renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+        });
+    }
+    m_threadPool->waitAll();
     }
 }
 

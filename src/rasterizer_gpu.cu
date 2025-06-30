@@ -26,7 +26,6 @@ __global__ void rasterizeKernel(const VertexDevice* vertices, const int* indices
     int triId = blockIdx.x;
     if (triId >= triCount) return;
 
-    // 三角形顶点索引
     int i0 = indices[triId * 3 + 0];
     int i1 = indices[triId * 3 + 1];
     int i2 = indices[triId * 3 + 2];
@@ -34,17 +33,14 @@ __global__ void rasterizeKernel(const VertexDevice* vertices, const int* indices
     VertexDevice v1 = vertices[i1];
     VertexDevice v2 = vertices[i2];
 
-    // 包围盒
     int minX = max(0, (int)floorf(fminf(fminf(v0.x, v1.x), v2.x)));
     int maxX = min(width - 1, (int)ceilf(fmaxf(fmaxf(v0.x, v1.x), v2.x)));
     int minY = max(0, (int)floorf(fminf(fminf(v0.y, v1.y), v2.y)));
     int maxY = min(height - 1, (int)ceilf(fmaxf(fmaxf(v0.y, v1.y), v2.y)));
 
-    // 重心分母
     float denom = ((v1.y - v2.y)*(v0.x - v2.x) + (v2.x - v1.x)*(v0.y - v2.y));
     if (fabsf(denom) < 1e-6f) return;
 
-    // 每线程扫描不同 y 行
     for (int py = minY + threadIdx.x; py <= maxY; py += blockDim.x) {
         for (int px = minX; px <= maxX; ++px) {
             float u = ((v1.y - v2.y)*(px - v2.x) + (v2.x - v1.x)*(py - v2.y)) / denom;

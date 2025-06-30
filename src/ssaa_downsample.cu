@@ -1,7 +1,5 @@
 #include <cuda_runtime.h>
 
-// 为避免拉入复杂的 C++ 头文件（其中包含条件编译，NVCC 下可能导致 #if/#endif 不匹配），
-// 这里重新定义一个简化版 Color，与 host 侧布局保持一致。
 struct ColorDevice {
     unsigned char r, g, b, a;
 };
