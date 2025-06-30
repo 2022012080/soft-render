@@ -7,6 +7,9 @@
 #include "model.h"
 #include "texture.h"
 #include "vector_math.h"
+#ifdef USE_CUDA
+#include "renderer_gpu.h"
+#endif
 
 class RenderWindow {
 public:
@@ -98,6 +101,12 @@ public:
     DWORD m_lastFPSTime;
     int   m_frameCount;
     float m_currentFPS;
+    
+    void ToggleBackend();
+    
+    // 后端类型显示控件
+    HWND m_backendStatusLabel;
+    void UpdateBackendStatus();
     
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);

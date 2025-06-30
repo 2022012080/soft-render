@@ -114,6 +114,7 @@ private:
 // 渲染器类
 class Renderer {
 private:
+    friend class RendererGPU;
     std::vector<Pixel> frameBuffer;
     std::vector<float> depthBuffer;
     int width, height;
@@ -201,6 +202,7 @@ private:
     struct ShaderVertex;
     
 public:
+    virtual ~Renderer() = default;
     Renderer(int w, int h);
     
     // 清空缓冲
@@ -315,6 +317,11 @@ public:
     
     // 获取帧缓冲
     const std::vector<Pixel>& getFrameBuffer() const { return frameBuffer; }
+    
+    // 非 const 访问，用于 GPU 直接写入
+    std::vector<Pixel>& getFrameBufferMutable() { return frameBuffer; }
+    
+    // 获取颜色缓冲
     const std::vector<Color>& getColorBuffer() const;
     
     // 保存图像
@@ -350,6 +357,9 @@ public:
     void renderTriangleHighResWithFaceIdx(const Vertex& v0, const Vertex& v1, const Vertex& v2, int faceIdx, const Model* pModel);
     void rasterizeTriangleHighResWithFaceIdx(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel);
     void setPixelHighResAlpha(int x, int y, const Color& src, float depth, float alpha);
+    
+    // 新增：GPU 版 MSAA 解析函数
+    void resolveMSAAToFrameBufferCUDA();
     
 private:
     // 顶点着色器
@@ -462,4 +472,8 @@ private:
     Vec3f calculateLightingWithParams(const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& ka, const Vec3f& kd, const Vec3f& ks, const Vec3f& emissionColor);
     Vec3f calculateSingleLightWithParams(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& kd, const Vec3f& ks);
     void setPixelAlpha(int x, int y, const Color& src, float depth, float alpha);
+
+#ifdef USE_CUDA
+    void downsampleFromHighResCUDA();
+#endif
 }; 

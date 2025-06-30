@@ -190,6 +190,8 @@ bool RenderWindow::Initialize() {
     
     StartMoveTimer();
     
+    UpdateBackendStatus();
+    
     return true;
 }
 
@@ -591,6 +593,10 @@ void RenderWindow::CreateControls() {
     // 帧率显示控件
     m_fpsLabel = CreateWindowA("STATIC", "FPS: 0", WS_VISIBLE | WS_CHILD,
         1420, 870, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+
+    // 后端状态标签
+    m_backendStatusLabel = CreateWindowA("STATIC", "Backend: CPU", WS_VISIBLE | WS_CHILD,
+        1220, 370, 120, 20, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
 }
 
 void RenderWindow::Run() {
@@ -755,6 +761,12 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
     case WM_KEYDOWN:
         {
             m_keyStates[wParam & 0xFF] = true;
+#ifdef USE_CUDA
+            if (wParam == VK_F9) {
+                ToggleBackend();
+                return 0;
+            }
+#endif
         }
         break;
 
@@ -1722,4 +1734,32 @@ void RenderWindow::OnEmissionChanged() {
     
     // 更新渲染
     UpdateRender();
+}
+
+void RenderWindow::ToggleBackend() {
+#ifdef USE_CUDA
+    bool isGpu = dynamic_cast<RendererGPU*>(m_renderer.get()) != nullptr;
+    int w = m_renderWidth;
+    int h = m_renderHeight;
+    if (isGpu) {
+        m_renderer = std::make_unique<Renderer>(w, h);
+        std::cout << "Switched to CPU renderer" << std::endl;
+    } else {
+        m_renderer = std::make_unique<RendererGPU>(w, h);
+        std::cout << "Switched to GPU renderer" << std::endl;
+    }
+#else
+    MessageBoxA(m_hwnd, "CUDA 后端未编译，无法切换到 GPU 渲染。", "提示", MB_ICONINFORMATION);
+#endif
+    UpdateRender();
+    UpdateBackendStatus();
+}
+
+void RenderWindow::UpdateBackendStatus() {
+#ifdef USE_CUDA
+    bool isGpu = dynamic_cast<RendererGPU*>(m_renderer.get()) != nullptr;
+    SetWindowTextA(m_backendStatusLabel, isGpu ? "Backend: GPU" : "Backend: CPU");
+#else
+    SetWindowTextA(m_backendStatusLabel, "Backend: CPU");
+#endif
 } 
