@@ -252,6 +252,10 @@ void Renderer::resolveMSAAToFrameBuffer() {
             frameBuffer[index].color = finalColor;
             if (hasValidSample) {
                 frameBuffer[index].depth = minDepth;
+                // 同时更新常规深度缓冲区，确保后续像素绘制（如线段、网格）能正确进行深度测试
+                if (index < depthBuffer.size()) {
+                    depthBuffer[index] = minDepth;
+                }
             }
         }
     }

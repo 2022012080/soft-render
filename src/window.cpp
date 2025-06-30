@@ -1068,6 +1068,10 @@ void RenderWindow::UpdateRender() {
         // 非SSAA模式下，先渲染模型
         if (m_model->getFaceCount() > 0) {
             m_renderer->renderModel(*m_model);
+            // 如果启用了 MSAA，则先解析一次，确保深度信息可用于后续线段的深度测试
+            if (m_renderer->isMSAAEnabled()) {
+                m_renderer->resolveMSAAToFrameBuffer();
+            }
         }
         
         // 然后绘制其他元素 - 根据开关决定是否绘制
@@ -1085,7 +1089,7 @@ void RenderWindow::UpdateRender() {
     }
     
     // 如果启用了MSAA，需要解析MSAA缓冲区到常规帧缓冲
-    if (m_renderer->isMSAAEnabled()) {
+    if (m_renderer->isMSAAEnabled() && m_renderer->isSSAAEnabled()) {
         m_renderer->resolveMSAAToFrameBuffer();
     }
     
