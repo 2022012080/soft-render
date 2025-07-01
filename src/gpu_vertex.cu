@@ -26,13 +26,14 @@ __global__ void vertexShaderKernel(const VertexIn* vin, VertexOut* vout,
     float ndcX = clip.x * invW;
     float ndcY = clip.y * invW;
     float ndcZ = clip.z * invW; 
+    float depth01 = (ndcZ + 1.0f) * 0.5f;  // 映射到[0,1]
 
     float screenX = (ndcX + 1.0f) * 0.5f * static_cast<float>(width);
     float screenY = (ndcY + 1.0f) * 0.5f * static_cast<float>(height);
 
     vout[idx].x = screenX;
     vout[idx].y = screenY;
-    vout[idx].z = ndcZ; 
+    vout[idx].z = depth01; 
     vout[idx].nx = vin[idx].nx;
     vout[idx].ny = vin[idx].ny;
     vout[idx].nz = vin[idx].nz;

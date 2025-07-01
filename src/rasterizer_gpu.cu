@@ -123,7 +123,9 @@ __global__ void rasterizeKernel(const VertexDevice* vertices, const int* indices
                                 int triCount, int width, int height,
                                 PixelDevice* frameBuf,
                                 const LightDevice* lights, int lightCount,
-                                const MaterialDevice* mat, const float3 viewPos, float ambientIntensity) {
+                                const MaterialDevice* mat, const float3 viewPos, float ambientIntensity,
+                                const float* faceAlphas,
+                                bool writeDepth) {
     int triId = blockIdx.x * blockDim.x + threadIdx.x;
     if (triId >= triCount) return;
     int i0 = indices[triId * 3 + 0];
@@ -147,8 +149,16 @@ __global__ void rasterizeKernel(const VertexDevice* vertices, const int* indices
             float depth = u * v0.z + v * v1.z + w * v2.z;
             int index = py * width + px;
             if (index < 0 || index >= width * height) continue;
-            bool depthUpdated = atomicMinIfFloat(&frameBuf[index].depth, depth);
-            if (depthUpdated) {
+            bool passDepthTest = false;
+            if (writeDepth) {
+                passDepthTest = atomicMinIfFloat(&frameBuf[index].depth, depth);
+            } else {
+                if (depth < frameBuf[index].depth - 1e-6f) passDepthTest = true;  
+            }
+
+            if (passDepthTest) {
+                float faceAlpha = 1.0f;
+                if (faceAlphas) faceAlpha = faceAlphas[triId];
                 float3 n0 = make_float3(v0.nx, v0.ny, v0.nz);
                 float3 n1 = make_float3(v1.nx, v1.ny, v1.nz);
                 float3 n2 = make_float3(v2.nx, v2.ny, v2.nz);
@@ -187,11 +197,27 @@ __global__ void rasterizeKernel(const VertexDevice* vertices, const int* indices
                 color.x = fminf(fmaxf(color.x, 0.0f), 1.0f);
                 color.y = fminf(fmaxf(color.y, 0.0f), 1.0f);
                 color.z = fminf(fmaxf(color.z, 0.0f), 1.0f);
-                unsigned char r = (unsigned char)(color.x * 255.0f);
-                unsigned char g = (unsigned char)(color.y * 255.0f);
-                unsigned char b = (unsigned char)(color.z * 255.0f);
-                frameBuf[index].color = { r, g, b, 255 };
-                atomicAdd(&g_pixelWriteCount, 1);
+                unsigned char r_new = (unsigned char)(color.x * 255.0f);
+                unsigned char g_new = (unsigned char)(color.y * 255.0f);
+                unsigned char b_new = (unsigned char)(color.z * 255.0f);
+
+                bool canWriteColor = true;
+                if (writeDepth) {
+                    canWriteColor = fabsf(frameBuf[index].depth - depth) < 1e-6f;
+                }
+                if (canWriteColor) {
+                    if (faceAlpha >= 0.999f) {
+                        frameBuf[index].color = { r_new, g_new, b_new, 255 };
+                    } else {
+                        float a = faceAlpha;
+                        ColorDevice dstCol = frameBuf[index].color;
+                        unsigned char r_blend = static_cast<unsigned char>(r_new * a + dstCol.r * (1.0f - a));
+                        unsigned char g_blend = static_cast<unsigned char>(g_new * a + dstCol.g * (1.0f - a));
+                        unsigned char b_blend = static_cast<unsigned char>(b_new * a + dstCol.b * (1.0f - a));
+                        frameBuf[index].color = { r_blend, g_blend, b_blend, 255 };
+                    }
+                    atomicAdd(&g_pixelWriteCount, 1);
+                }
             }
         }
     }
@@ -201,7 +227,9 @@ extern "C" void launchRasterizeKernel(const void* d_vertices, const void* d_indi
                                        int triCount, int width, int height,
                                        void* d_frameBuffer,
                                        const void* d_lights, int lightCount,
-                                       const void* d_mat, const float3 viewPos, float ambientIntensity) {
+                                       const void* d_mat, const float3 viewPos, float ambientIntensity,
+                                       const void* d_faceAlphas,
+                                       bool writeDepth) {
     printf("[launchRasterizeKernel] sizeof(PixelDevice) (device) = %zu\n", sizeof(PixelDevice));
     int zero = 0;
     cudaMemcpyToSymbol(g_pixelWriteCount, &zero, sizeof(int));
@@ -211,7 +239,9 @@ extern "C" void launchRasterizeKernel(const void* d_vertices, const void* d_indi
                                      triCount, width, height,
                                      (PixelDevice*)d_frameBuffer,
                                      (const LightDevice*)d_lights, lightCount,
-                                     (const MaterialDevice*)d_mat, viewPos, ambientIntensity);
+                                     (const MaterialDevice*)d_mat, viewPos, ambientIntensity,
+                                     (const float*)d_faceAlphas,
+                                     writeDepth);
     cudaDeviceSynchronize();
     int pixelWriteCount = 0;
     cudaMemcpyFromSymbol(&pixelWriteCount, g_pixelWriteCount, sizeof(int));

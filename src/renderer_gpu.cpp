@@ -28,7 +28,9 @@ extern "C" void launchRasterizeKernel(const void* d_vertices, const void* d_indi
                                         int triCount, int width, int height,
                                         void* d_frameBuffer,
                                         const void* d_lights, int lightCount,
-                                        const void* d_mat, float3 viewPos, float ambientIntensity);
+                                        const void* d_mat, float3 viewPos, float ambientIntensity,
+                                        const void* d_faceAlphas,
+                                        bool writeDepth);
 
 extern "C" void cudaClearFrameBuffer(void* buf, int count,
                                       unsigned char r, unsigned char g,
@@ -51,10 +53,16 @@ void RendererGPU::renderModel(const Model& model) {
 
     std::cout << "[GPU] Preparing vertex/index data..." << std::endl;
     std::vector<VertexDevice> cpuVerts;
-    std::vector<int> gpuIndices;
+    std::vector<int> gpuIndicesOpaque;
+    std::vector<int> gpuIndicesTransparent;
+    std::vector<float> faceAlphasOpaque;
+    std::vector<float> faceAlphasTrans;
     size_t faceCount = model.getFaceCount();
     cpuVerts.reserve(faceCount * 3);
-    gpuIndices.reserve(faceCount * 3);
+    gpuIndicesOpaque.reserve(faceCount * 3);
+    gpuIndicesTransparent.reserve(faceCount * 3);
+    faceAlphasOpaque.reserve(faceCount);
+    faceAlphasTrans.reserve(faceCount);
 
     // Device pointers
     VertexDevice* d_verts = nullptr;
@@ -77,13 +85,23 @@ void RendererGPU::renderModel(const Model& model) {
         };
         addV(v0); addV(v1); addV(v2);
         int base = static_cast<int>(i * 3);
-        gpuIndices.push_back(base);
-        gpuIndices.push_back(base + 1);
-        gpuIndices.push_back(base + 2);
+        float alpha = model.getFaceAlpha(static_cast<int>(i));
+        if (alpha >= 0.999f) {
+            gpuIndicesOpaque.push_back(base);
+            gpuIndicesOpaque.push_back(base + 1);
+            gpuIndicesOpaque.push_back(base + 2);
+            faceAlphasOpaque.push_back(alpha);
+        } else {
+            gpuIndicesTransparent.push_back(base);
+            gpuIndicesTransparent.push_back(base + 1);
+            gpuIndicesTransparent.push_back(base + 2);
+            faceAlphasTrans.push_back(alpha);
+        }
     }
 
     size_t vBytes = cpuVerts.size() * sizeof(VertexDevice);
-    size_t iBytes = gpuIndices.size() * sizeof(int);
+    size_t iBytesOpaque = gpuIndicesOpaque.size() * sizeof(int);
+    size_t iBytesTrans = gpuIndicesTransparent.size() * sizeof(int);
 
     // For MVP
     float mvpArr[16];
@@ -156,7 +174,9 @@ void RendererGPU::renderModel(const Model& model) {
     cudaError_t err;
     err = cudaMalloc(&d_verts, vBytes); if (err) { std::cout << "[cudaMalloc][ERROR] d_verts failed: " << cudaGetErrorString(err) << std::endl; return; }
     CHECK_CUDA_ERROR("cudaMalloc d_verts");
-    err = cudaMalloc(&d_idx, iBytes); if (err) { std::cout << "[cudaMalloc][ERROR] d_idx failed: " << cudaGetErrorString(err) << std::endl; return; }
+    size_t maxIdxBytes = std::max(iBytesOpaque, iBytesTrans);
+    err = cudaMalloc(&d_idx, std::max(maxIdxBytes, (size_t)1));
+    if (err) { std::cout << "[cudaMalloc][ERROR] d_idx failed: " << cudaGetErrorString(err) << std::endl; return; }
     CHECK_CUDA_ERROR("cudaMalloc d_idx");
     std::cout << "[DEBUG] sizeof(PixelDevice) (host) = " << sizeof(PixelDevice) << std::endl;
     size_t frameBytes = w * h * sizeof(PixelDevice);
@@ -164,14 +184,17 @@ void RendererGPU::renderModel(const Model& model) {
     err = cudaMalloc(&d_frame, frameBytes); if (err) { std::cout << "[cudaMalloc][ERROR] d_frame failed: " << cudaGetErrorString(err) << std::endl; return; }
     CHECK_CUDA_ERROR("cudaMalloc d_frame");
     // 清空framebuffer和depth
-    cudaClearFrameBuffer(d_frame, w * h, black.r, black.g, black.b, black.a, 1e30f);
+    cudaClearFrameBuffer(d_frame, w * h, black.r, black.g, black.b, black.a, 1.0f);
     CHECK_CUDA_ERROR("cudaClearFrameBuffer");
 
     std::cout << "[GPU] Copying vertex/index data to device..." << std::endl;
     err = cudaMemcpy(d_verts, cpuVerts.data(), vBytes, cudaMemcpyHostToDevice); if (err) { std::cout << "[cudaMemcpy][ERROR] d_verts failed: " << cudaGetErrorString(err) << std::endl; return; }
     CHECK_CUDA_ERROR("cudaMemcpy d_verts");
-    err = cudaMemcpy(d_idx, gpuIndices.data(), iBytes, cudaMemcpyHostToDevice); if (err) { std::cout << "[cudaMemcpy][ERROR] d_idx failed: " << cudaGetErrorString(err) << std::endl; return; }
-    CHECK_CUDA_ERROR("cudaMemcpy d_idx");
+    if (!gpuIndicesOpaque.empty()) {
+        err = cudaMemcpy(d_idx, gpuIndicesOpaque.data(), iBytesOpaque, cudaMemcpyHostToDevice);
+        if (err) { std::cout << "[cudaMemcpy][ERROR] d_idx opaque failed: " << cudaGetErrorString(err) << std::endl; return; }
+        CHECK_CUDA_ERROR("cudaMemcpy d_idx opaque");
+    }
 
     std::cout << "[GPU] Allocating device memory for lights/material..." << std::endl;
     if (!lightDevs.empty()) {
@@ -201,11 +224,11 @@ void RendererGPU::renderModel(const Model& model) {
 
     // 启动kernel前，检查索引范围
     int maxIdx = 0;
-    for (size_t i = 0; i < gpuIndices.size(); ++i) {
-        if (gpuIndices[i] > maxIdx) maxIdx = gpuIndices[i];
+    for (size_t i = 0; i < gpuIndicesOpaque.size(); ++i) {
+        if (gpuIndicesOpaque[i] > maxIdx) maxIdx = gpuIndicesOpaque[i];
     }
     std::cout << "[DEBUG] max gpuIndices = " << maxIdx << ", cpuVerts.size() = " << cpuVerts.size() << std::endl;
-    std::cout << "[DEBUG] gpuIndices.size() = " << gpuIndices.size() << ", triCount = " << faceCount << std::endl;
+    std::cout << "[DEBUG] gpuIndices.size() = " << gpuIndicesOpaque.size() << ", triCount = " << faceCount << std::endl;
 
     // 输出第一个三角形的原始顶点和MVP变换后坐标
     if (cpuVerts.size() >= 3) {
@@ -222,6 +245,20 @@ void RendererGPU::renderModel(const Model& model) {
             std::cout << "[CPU][triId=0][MVP] v" << i << "_clip=(" << tx << "," << ty << "," << tz << "," << tw << ")\n";
         }
     }
+
+    // Create device alpha arrays separately
+    auto uploadAlphaArray = [&](const std::vector<float>& vec, float*& d_ptr){
+        if (vec.empty()) { d_ptr = nullptr; return; }
+        cudaMalloc(&d_ptr, sizeof(float)*vec.size());
+        CHECK_CUDA_ERROR("cudaMalloc alpha");
+        cudaMemcpy(d_ptr, vec.data(), sizeof(float)*vec.size(), cudaMemcpyHostToDevice);
+        CHECK_CUDA_ERROR("cudaMemcpy alpha");
+    };
+
+    float* d_alphasOpaque = nullptr;
+    float* d_alphasTrans  = nullptr;
+    uploadAlphaArray(faceAlphasOpaque, d_alphasOpaque);
+    uploadAlphaArray(faceAlphasTrans,  d_alphasTrans);
 
     launchVertexShaderKernel(d_verts, d_clip, static_cast<int>(cpuVerts.size()), mvpArr, w, h);
     CHECK_CUDA_ERROR("launchVertexShaderKernel");
@@ -281,9 +318,59 @@ void RendererGPU::renderModel(const Model& model) {
     std::cout << "[GPU] Launching rasterizer kernel..." << std::endl;
     cudaEventRecord(startKernel, 0);
     CHECK_CUDA_ERROR("cudaEventRecord startKernel");
-    launchRasterizeKernel(d_clip, d_idx, static_cast<int>(faceCount), w, h, d_frame,
-        d_lights, lightCount, d_mat, viewPos, ambientIntensity);
-    CHECK_CUDA_ERROR("launchRasterizeKernel");
+    int triCountOpaque = static_cast<int>(gpuIndicesOpaque.size() / 3);
+    int triCountTrans  = static_cast<int>(gpuIndicesTransparent.size() / 3);
+
+    // Pass 1: Opaque
+    if (triCountOpaque > 0) {
+        launchRasterizeKernel(d_clip, d_idx, triCountOpaque, w, h, d_frame,
+            d_lights, lightCount, d_mat, viewPos, ambientIntensity, d_alphasOpaque, true);
+        CHECK_CUDA_ERROR("launchRasterizeKernel opaque");
+    }
+
+    // Pass 2: Transparent --- sort back-to-front & render one triangle per launch
+    if (triCountTrans > 0) {
+        struct TransInfo { int baseIdx; float dist; float alpha; };
+        std::vector<TransInfo> transList;
+        transList.reserve(triCountTrans);
+
+        // 计算相机世界坐标（已在 camWorld）
+        for (size_t i = 0; i < triCountTrans; ++i) {
+            int base = gpuIndicesTransparent[i*3];
+            // 取三个顶点局部坐标 -> 世界坐标
+            Vec3f lp0(cpuVerts[base].x, cpuVerts[base].y, cpuVerts[base].z);
+            Vec3f lp1(cpuVerts[base+1].x, cpuVerts[base+1].y, cpuVerts[base+1].z);
+            Vec3f lp2(cpuVerts[base+2].x, cpuVerts[base+2].y, cpuVerts[base+2].z);
+            Vec3f wp0 = modelMatrix * lp0;
+            Vec3f wp1 = modelMatrix * lp1;
+            Vec3f wp2 = modelMatrix * lp2;
+            Vec3f centroid = (wp0 + wp1 + wp2) / 3.0f;
+            float dist = (centroid - camWorld).length();
+            transList.push_back({base, dist, faceAlphasTrans[i]});
+        }
+
+        std::sort(transList.begin(), transList.end(), [](const TransInfo& a, const TransInfo& b){ return a.dist > b.dist; });
+
+        // 设备端 alpha 缓冲（单值复用）
+        float* d_alphaSingle = nullptr;
+        cudaMalloc(&d_alphaSingle, sizeof(float));
+        CHECK_CUDA_ERROR("cudaMalloc alphaSingle");
+
+        int triplet[3];
+        for (const auto& t : transList) {
+            triplet[0] = t.baseIdx;
+            triplet[1] = t.baseIdx + 1;
+            triplet[2] = t.baseIdx + 2;
+            cudaMemcpy(d_idx, triplet, sizeof(triplet), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_alphaSingle, &t.alpha, sizeof(float), cudaMemcpyHostToDevice);
+            launchRasterizeKernel(d_clip, d_idx, 1, w, h, d_frame,
+                d_lights, lightCount, d_mat, viewPos, ambientIntensity, d_alphaSingle, false);
+            CHECK_CUDA_ERROR("launchRasterizeKernel trans tri");
+        }
+
+        cudaFree(d_alphaSingle);
+    }
+
     cudaEventRecord(stopKernel, 0);
     CHECK_CUDA_ERROR("cudaEventRecord stopKernel");
     cudaEventSynchronize(stopKernel);
@@ -315,6 +402,8 @@ void RendererGPU::renderModel(const Model& model) {
     if (d_mat) cudaFree(d_mat);
     cudaFree(d_clip);
     d_clip = nullptr;
+    if (d_alphasOpaque) cudaFree(d_alphasOpaque);
+    if (d_alphasTrans) cudaFree(d_alphasTrans);
     cudaEventDestroy(startKernel);
     cudaEventDestroy(stopKernel);
     cudaEventDestroy(startMemcpy);
