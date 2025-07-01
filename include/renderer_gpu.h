@@ -8,6 +8,6 @@ public:
     using Renderer::Renderer; // 复用基类构造函数
 
     // 渲染模型（GPU 路径）
-    void renderModel(const Model& model);
+    void renderModel(const Model& model) override;
 };
 #endif // USE_CUDA 

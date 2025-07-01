@@ -310,7 +310,7 @@ public:
     float getSpineSharpness() const { return m_spineSharpness; }
     
     // 渲染模型
-    void renderModel(const Model& model);
+    virtual void renderModel(const Model& model);
     
     // 渲染三角形
     void renderTriangle(const Vertex& v0, const Vertex& v1, const Vertex& v2);

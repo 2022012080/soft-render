@@ -1748,6 +1748,7 @@ void RenderWindow::ToggleBackend() {
         m_renderer = std::make_unique<RendererGPU>(w, h);
         std::cout << "Switched to GPU renderer" << std::endl;
     }
+    std::cout << "Renderer type: " << typeid(*m_renderer).name() << std::endl;
 #else
     MessageBoxA(m_hwnd, "CUDA 后端未编译，无法切换到 GPU 渲染。", "提示", MB_ICONINFORMATION);
 #endif
