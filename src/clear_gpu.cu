@@ -13,17 +13,33 @@ __global__ void clearKernel(PixelDevice* buf, int count, ColorDevice col, float 
 extern "C" void cudaClearFrameBuffer(void* buf, int count,
                                       unsigned char r, unsigned char g,
                                       unsigned char b, unsigned char a,
-                                      float depth) {
-    PixelDevice* d_buf = nullptr;
-    size_t bytes = sizeof(PixelDevice) * count;
-    cudaMalloc(&d_buf, bytes);
+                                      float depth)
+{
+    if (buf == nullptr || count <= 0) return;
 
-    int threads = 256;
-    int blocks = (count + threads - 1) / threads;
+#if CUDART_VERSION >= 10000
+    cudaPointerAttributes attr;
+    cudaError_t err = cudaPointerGetAttributes(&attr, buf);
+    bool isDevicePtr = (err == cudaSuccess && attr.type == cudaMemoryTypeDevice);
+#else
+    cudaPointerAttributes attr;
+    cudaError_t err = cudaPointerGetAttributes(&attr, buf);
+    bool isDevicePtr = (err == cudaSuccess && attr.memoryType == cudaMemoryTypeDevice);
+#endif
+
     ColorDevice col = { r, g, b, a };
-    clearKernel<<<blocks, threads>>>(d_buf, count, col, depth);
-    cudaDeviceSynchronize();
 
-    cudaMemcpy(buf, d_buf, bytes, cudaMemcpyDeviceToHost);
-    cudaFree(d_buf);
+    if (isDevicePtr) {
+        PixelDevice* d_buf = static_cast<PixelDevice*>(buf);
+        int threads = 256;
+        int blocks = (count + threads - 1) / threads;
+        clearKernel<<<blocks, threads>>>(d_buf, count, col, depth);
+        cudaDeviceSynchronize();
+    } else {
+        PixelDevice* h_buf = static_cast<PixelDevice*>(buf);
+        for (int i = 0; i < count; ++i) {
+            h_buf[i].color = col;
+            h_buf[i].depth = depth;
+        }
+    }
 } 

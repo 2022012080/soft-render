@@ -38,7 +38,6 @@ __global__ void msaaResolveKernel(const SampleDevice* samples, const ColorDevice
     PixelDevice result;
 
     if (coveredCount == 0) {
-        // 完全未覆盖：保持背景色
         result.color = bg[idx];
         result.depth = 1.0f;
     } else {
@@ -49,7 +48,7 @@ __global__ void msaaResolveKernel(const SampleDevice* samples, const ColorDevice
         avg.a = 255;
 
         if (coveredCount == sampleCount) {
-            // 全部采样点覆盖
+            
             result.color = avg;
         } else {
             float coverage = static_cast<float>(coveredCount) / sampleCount;

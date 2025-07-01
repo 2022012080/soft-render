@@ -35,7 +35,7 @@ extern "C" void cudaClearFrameBuffer(void* buf, int count,
                                       unsigned char b, unsigned char a,
                                       float depth);
 
-extern "C" void launchVertexShaderKernel(const void*, void*, int, const float*);
+extern "C" void launchVertexShaderKernel(const void*, void*, int, const float*, int, int);
 
 #define CHECK_CUDA_ERROR(msg) { \
     cudaError_t err = cudaGetLastError(); \
@@ -87,7 +87,7 @@ void RendererGPU::renderModel(const Model& model) {
 
     // For MVP
     float mvpArr[16];
-    Matrix4x4 mvp = viewportMatrix * projectionMatrix * viewMatrix * modelMatrix;
+    Matrix4x4 mvp = projectionMatrix * viewMatrix * modelMatrix;
     // 填充mvpArr为column-major顺序
     std::cout << "[DEBUG] MVP matrix (row major):\n";
     for (int i = 0; i < 4; ++i) {
@@ -158,10 +158,14 @@ void RendererGPU::renderModel(const Model& model) {
     CHECK_CUDA_ERROR("cudaMalloc d_verts");
     err = cudaMalloc(&d_idx, iBytes); if (err) { std::cout << "[cudaMalloc][ERROR] d_idx failed: " << cudaGetErrorString(err) << std::endl; return; }
     CHECK_CUDA_ERROR("cudaMalloc d_idx");
+    std::cout << "[DEBUG] sizeof(PixelDevice) (host) = " << sizeof(PixelDevice) << std::endl;
     size_t frameBytes = w * h * sizeof(PixelDevice);
     std::cout << "[DEBUG] frameBytes = " << frameBytes << ", w = " << w << ", h = " << h << ", sizeof(PixelDevice) = " << sizeof(PixelDevice) << std::endl;
     err = cudaMalloc(&d_frame, frameBytes); if (err) { std::cout << "[cudaMalloc][ERROR] d_frame failed: " << cudaGetErrorString(err) << std::endl; return; }
     CHECK_CUDA_ERROR("cudaMalloc d_frame");
+    // 清空framebuffer和depth
+    cudaClearFrameBuffer(d_frame, w * h, black.r, black.g, black.b, black.a, 1e30f);
+    CHECK_CUDA_ERROR("cudaClearFrameBuffer");
 
     std::cout << "[GPU] Copying vertex/index data to device..." << std::endl;
     err = cudaMemcpy(d_verts, cpuVerts.data(), vBytes, cudaMemcpyHostToDevice); if (err) { std::cout << "[cudaMemcpy][ERROR] d_verts failed: " << cudaGetErrorString(err) << std::endl; return; }
@@ -219,7 +223,7 @@ void RendererGPU::renderModel(const Model& model) {
         }
     }
 
-    launchVertexShaderKernel(d_verts, d_clip, static_cast<int>(cpuVerts.size()), mvpArr);
+    launchVertexShaderKernel(d_verts, d_clip, static_cast<int>(cpuVerts.size()), mvpArr, w, h);
     CHECK_CUDA_ERROR("launchVertexShaderKernel");
     cudaFree(d_verts);
     d_verts = nullptr;
@@ -230,6 +234,31 @@ void RendererGPU::renderModel(const Model& model) {
     std::cout << "[CPU][clip] triId=0 clip verts:" << std::endl;
     for (int i = 0; i < 3 && i < hostClipVerts.size(); ++i) {
         std::cout << "v" << i << "_clip=(" << hostClipVerts[i].x << "," << hostClipVerts[i].y << "," << hostClipVerts[i].z << ")\n";
+    }
+
+    // 统计CPU端第一个三角形实际写入像素数
+    int cpuPixelWriteCount = 0;
+    if (cpuVerts.size() >= 3) {
+        // 取第一个三角形的clip顶点
+        float x0 = hostClipVerts[0].x, y0 = hostClipVerts[0].y, z0 = hostClipVerts[0].z;
+        float x1 = hostClipVerts[1].x, y1 = hostClipVerts[1].y, z1 = hostClipVerts[1].z;
+        float x2 = hostClipVerts[2].x, y2 = hostClipVerts[2].y, z2 = hostClipVerts[2].z;
+        int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
+        int maxX = std::min(w - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
+        int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
+        int maxY = std::min(h - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
+        float denom = (y1 - y2)*(x0 - x2) + (x2 - x1)*(y0 - y2);
+        for (int y = minY; y <= maxY; ++y) {
+            for (int x = minX; x <= maxX; ++x) {
+                float u = ((y1 - y2)*((float)x + 0.5f - x2) + (x2 - x1)*((float)y + 0.5f - y2)) / denom;
+                float v = ((y2 - y0)*((float)x + 0.5f - x2) + (x0 - x2)*((float)y + 0.5f - y2)) / denom;
+                float w = 1.0f - u - v;
+                if (u >= 0 && v >= 0 && w >= 0) {
+                    cpuPixelWriteCount++;
+                }
+            }
+        }
+        std::cout << "[CPU][triId=0] pixelWriteCount = " << cpuPixelWriteCount << std::endl;
     }
 
     std::cout << "[GPU] Clearing framebuffer..." << std::endl;
@@ -291,6 +320,8 @@ void RendererGPU::renderModel(const Model& model) {
     cudaEventDestroy(startMemcpy);
     cudaEventDestroy(stopMemcpy);
     std::cout << "[GPU] renderModel finished." << std::endl;
+
+    printf("[host] sizeof(PixelDevice)=%zu\n", sizeof(PixelDevice));
 }
 
 #endif // USE_CUDA 
