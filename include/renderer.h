@@ -114,7 +114,6 @@ private:
 // 渲染器类
 class Renderer {
 private:
-    friend class RendererGPU;
     std::vector<Pixel> frameBuffer;
     std::vector<float> depthBuffer;
     int width, height;
@@ -318,9 +317,6 @@ public:
     // 获取帧缓冲
     const std::vector<Pixel>& getFrameBuffer() const { return frameBuffer; }
     
-    // 非 const 访问，用于 GPU 直接写入
-    std::vector<Pixel>& getFrameBufferMutable() { return frameBuffer; }
-    
     // 获取颜色缓冲
     const std::vector<Color>& getColorBuffer() const;
     
@@ -357,9 +353,6 @@ public:
     void renderTriangleHighResWithFaceIdx(const Vertex& v0, const Vertex& v1, const Vertex& v2, int faceIdx, const Model* pModel);
     void rasterizeTriangleHighResWithFaceIdx(const ShaderVertex& v0, const ShaderVertex& v1, const ShaderVertex& v2, int faceIdx, const Model* pModel);
     void setPixelHighResAlpha(int x, int y, const Color& src, float depth, float alpha);
-    
-    // 新增：GPU 版 MSAA 解析函数
-    void resolveMSAAToFrameBufferCUDA();
     
 private:
     // 顶点着色器

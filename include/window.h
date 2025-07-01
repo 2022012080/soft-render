@@ -7,9 +7,6 @@
 #include "model.h"
 #include "texture.h"
 #include "vector_math.h"
-#ifdef USE_CUDA
-#include "renderer_gpu.h"
-#endif
 
 class RenderWindow {
 public:

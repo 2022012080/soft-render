@@ -62,12 +62,6 @@ set(SOURCES
     src/window.cpp
 )
 
-if(CUDAToolkit_FOUND)
-    list(APPEND SOURCES ${CUDA_SOURCES} src/renderer_gpu.cpp)
-else()
-    list(APPEND SOURCES src/ssaa_downsample_stub.cpp src/msaa_resolve_stub.cpp src/rasterizer_gpu_stub.cpp src/renderer_gpu_stub.cpp src/clear_gpu_stub.cpp src/gpu_vertex_stub.cpp)
-endif()
-
 # 创建可执行文件
 add_executable(SoftRenderer ${SOURCES})
 

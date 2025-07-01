@@ -1738,18 +1738,6 @@ void RenderWindow::OnEmissionChanged() {
 
 void RenderWindow::ToggleBackend() {
 #ifdef USE_CUDA
-    bool isGpu = dynamic_cast<RendererGPU*>(m_renderer.get()) != nullptr;
-    int w = m_renderWidth;
-    int h = m_renderHeight;
-    if (isGpu) {
-        m_renderer = std::make_unique<Renderer>(w, h);
-        std::cout << "Switched to CPU renderer" << std::endl;
-    } else {
-        m_renderer = std::make_unique<RendererGPU>(w, h);
-        std::cout << "Switched to GPU renderer" << std::endl;
-    }
-    std::cout << "Renderer type: " << typeid(*m_renderer).name() << std::endl;
-#else
     MessageBoxA(m_hwnd, "CUDA 后端未编译，无法切换到 GPU 渲染。", "提示", MB_ICONINFORMATION);
 #endif
     UpdateRender();
@@ -1757,10 +1745,5 @@ void RenderWindow::ToggleBackend() {
 }
 
 void RenderWindow::UpdateBackendStatus() {
-#ifdef USE_CUDA
-    bool isGpu = dynamic_cast<RendererGPU*>(m_renderer.get()) != nullptr;
-    SetWindowTextA(m_backendStatusLabel, isGpu ? "Backend: GPU" : "Backend: CPU");
-#else
     SetWindowTextA(m_backendStatusLabel, "Backend: CPU");
-#endif
 } 
