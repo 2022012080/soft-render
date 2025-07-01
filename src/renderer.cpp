@@ -4,116 +4,6 @@
 #include <iostream>
 #include <cmath>
 #include <atomic>
-#ifdef USE_CUDA
-#include <cuda_runtime.h>
-#ifdef __cplusplus
-extern "C" {
-#endif
-void ssaaDownsampleKernelLauncher(const void* hi, void* lo,
-                                         int lowW, int lowH, int scale, int highW);
-#ifdef __cplusplus
-}
-#endif
-
-void Renderer::downsampleFromHighResCUDA() {
-    int hiSize = static_cast<int>(m_highResFrameBuffer.size());
-    int loSize = static_cast<int>(frameBuffer.size());
-    if (hiSize == 0 || loSize == 0) {
-        downsampleFromHighRes();
-        return;
-    }
-
-    size_t hiBytes = sizeof(Pixel) * hiSize;
-    size_t loBytes = sizeof(Pixel) * loSize;
-
-    Pixel* d_hi = nullptr;
-    Pixel* d_lo = nullptr;
-    cudaMalloc(&d_hi, hiBytes);
-    cudaMalloc(&d_lo, loBytes);
-
-    cudaMemcpy(d_hi, m_highResFrameBuffer.data(), hiBytes, cudaMemcpyHostToDevice);
-
-    ssaaDownsampleKernelLauncher(d_hi, d_lo, width, height, m_ssaaScale, m_highResWidth);
-
-    cudaMemcpy(frameBuffer.data(), d_lo, loBytes, cudaMemcpyDeviceToHost);
-
-    cudaFree(d_hi);
-    cudaFree(d_lo);
-}
-
-extern "C" void msaaResolveKernelLauncher(const void* sampleBuf, const void* bgColors,
-                                            void* outPixels, int pixelCount, int sampleCount);
-
-void Renderer::resolveMSAAToFrameBufferCUDA() {
-    int pixelCount = width * height;
-    int sampleCount = m_msaaSampleCount;
-    if (pixelCount == 0 || sampleCount == 0) {
-        return;
-    }
-
-    // ---------- 主机端展平数据 ----------
-    struct ColorDevice { unsigned char r, g, b, a; };
-    struct SampleDevice { ColorDevice color; float depth; unsigned char covered; };
-    struct PixelDevice { ColorDevice color; float depth; };
-
-    std::vector<SampleDevice> hostSamples;
-    hostSamples.resize(static_cast<size_t>(pixelCount) * sampleCount);
-
-    for (int idx = 0; idx < pixelCount; ++idx) {
-        const auto& pixel = m_msaaFrameBuffer[idx];
-        for (int s = 0; s < sampleCount; ++s) {
-            const auto& samp = pixel.samples[s];
-            SampleDevice d;
-            d.color = { samp.color.r, samp.color.g, samp.color.b, samp.color.a };
-            d.depth = samp.depth;
-            d.covered = samp.covered ? 1 : 0;
-            hostSamples[idx * sampleCount + s] = d;
-        }
-    }
-
-    // 背景色数组
-    std::vector<ColorDevice> hostBg(pixelCount);
-    for (int i = 0; i < pixelCount; ++i) {
-        hostBg[i] = { frameBuffer[i].color.r, frameBuffer[i].color.g,
-                      frameBuffer[i].color.b, frameBuffer[i].color.a };
-    }
-
-    // 设备内存分配
-    SampleDevice* d_samples = nullptr;
-    ColorDevice* d_bg = nullptr;
-    PixelDevice* d_out = nullptr;
-    size_t samplesBytes = hostSamples.size() * sizeof(SampleDevice);
-    size_t bgBytes = hostBg.size() * sizeof(ColorDevice);
-    size_t outBytes = pixelCount * sizeof(PixelDevice);
-
-    cudaMalloc(&d_samples, samplesBytes);
-    cudaMalloc(&d_bg, bgBytes);
-    cudaMalloc(&d_out, outBytes);
-
-    cudaMemcpy(d_samples, hostSamples.data(), samplesBytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_bg, hostBg.data(), bgBytes, cudaMemcpyHostToDevice);
-
-    // ---------- 调度 Kernel ----------
-    msaaResolveKernelLauncher(d_samples, d_bg, d_out, pixelCount, sampleCount);
-
-    // ---------- 结果拷回 ----------
-    std::vector<PixelDevice> hostOut(pixelCount);
-    cudaMemcpy(hostOut.data(), d_out, outBytes, cudaMemcpyDeviceToHost);
-
-    // 写回到 frameBuffer 与 depthBuffer
-    for (int i = 0; i < pixelCount; ++i) {
-        frameBuffer[i].color = { hostOut[i].color.r, hostOut[i].color.g,
-                                 hostOut[i].color.b, hostOut[i].color.a };
-        frameBuffer[i].depth = hostOut[i].depth;
-        if (i < depthBuffer.size()) depthBuffer[i] = hostOut[i].depth;
-    }
-
-    // 释放显存
-    cudaFree(d_samples);
-    cudaFree(d_bg);
-    cudaFree(d_out);
-}
-#endif
 
 // ================= ThreadPool 实现 =================
 ThreadPool::ThreadPool(size_t numThreads) : stop(false), workingCount(0) {
@@ -232,7 +122,7 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 初始化法向量变换矩阵
     updateNormalMatrix();
     
-    m_threadPool = std::make_unique<ThreadPool>(8);
+    m_threadPool = std::make_unique<ThreadPool>(4);
 }
 
 void Renderer::enableSSAA(bool enable, int scale) {
@@ -337,9 +227,6 @@ bool Renderer::isPointInTriangle(const Vec2f& p, const Vec2f& v0, const Vec2f& v
 
 void Renderer::resolveMSAAToFrameBuffer() {
     if (!m_enableMSAA) return;
-#ifdef USE_CUDA
-    resolveMSAAToFrameBufferCUDA();
-#else
     // -------- CPU 实现 --------
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -366,7 +253,6 @@ void Renderer::resolveMSAAToFrameBuffer() {
             }
         }
     }
-#endif
 }
 
 // ================= MSAA 实现结束 =================
@@ -2209,10 +2095,6 @@ void Renderer::renderTriangleHighResWithFaceIdx(const Vertex& v0, const Vertex& 
 // 将高分辨率缓冲区降采样到常规帧缓冲
 void Renderer::resolveSSAAToFrameBuffer() {
     if (!m_enableSSAA) return;
-#ifdef USE_CUDA
-    downsampleFromHighResCUDA();
-#else
     downsampleFromHighRes();
-#endif
 }
 
