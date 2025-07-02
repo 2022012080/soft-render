@@ -1342,7 +1342,8 @@ void RenderWindow::OnToggleMSAA() {
 void RenderWindow::OnMSAASampleIncrease() {
     int currentSampleCount = m_renderer->getMSAASampleCount();
     if (currentSampleCount < 8) {  // 限制最大8个采样点
-        int newSampleCount = (currentSampleCount == 4) ? 8 : 4;  // 4x -> 8x
+        int newSampleCount = currentSampleCount * 2;  // 倍增
+        newSampleCount = std::min(newSampleCount, 8);  // 不超过8x
         bool wasEnabled = m_renderer->isMSAAEnabled();
         
         if (wasEnabled) {
@@ -1361,8 +1362,8 @@ void RenderWindow::OnMSAASampleIncrease() {
 
 void RenderWindow::OnMSAASampleDecrease() {
     int currentSampleCount = m_renderer->getMSAASampleCount();
-    if (currentSampleCount > 4) {  // 限制最小4个采样点
-        int newSampleCount = 4;  // 8x -> 4x
+    if (currentSampleCount > 2) {  // 限制最小2个采样点
+        int newSampleCount = currentSampleCount / 2;  // 倍减
         bool wasEnabled = m_renderer->isMSAAEnabled();
         
         if (wasEnabled) {
@@ -1395,7 +1396,7 @@ void RenderWindow::UpdateMSAAControls() {
     
     // 更新按钮状态
     EnableWindow(m_msaaSampleIncBtn, sampleCount < 8);
-    EnableWindow(m_msaaSampleDecBtn, sampleCount > 4);
+    EnableWindow(m_msaaSampleDecBtn, sampleCount > 2);
 }
 
 void RenderWindow::OnLoadModel() {

@@ -350,7 +350,11 @@ void Renderer::renderModel(const Model& model) {
 
     if (m_enableSSAA) {
         Matrix4x4 originalViewport = viewportMatrix;
+        // 保存原始 m_mvpvMatrix，以便恢复
+        Matrix4x4 originalMVPV = m_mvpvMatrix;
         viewportMatrix = createHighResViewportMatrix();
+        // 使用高分辨率视口重新计算组合矩阵
+        m_mvpvMatrix = viewportMatrix * projectionMatrix * viewMatrix * modelMatrix;
 
         // 并行处理：按面块提交任务
         for (size_t taskIdx = 0; taskIdx < numTasks; ++taskIdx) {
@@ -368,7 +372,9 @@ void Renderer::renderModel(const Model& model) {
             });
         }
         m_threadPool->waitAll();
+        // 恢复原始视口和组合矩阵
         viewportMatrix = originalViewport;
+        m_mvpvMatrix = originalMVPV;
     } else {
         // 原有路径：支持 MSAA/普通
        // 非SSAA模式下：按面块提交任务
