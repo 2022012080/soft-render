@@ -335,64 +335,70 @@ void Renderer::renderModel(const Model& model) {
     size_t faceCount = model.getFaceCount();
     if (faceCount == 0) return;
 
+    // 1. 分类面索引
+    std::vector<size_t> opaqueFaces;
+    std::vector<size_t> transparentFaces;
+    for (size_t i = 0; i < faceCount; ++i) {
+        float alpha = model.getFaceAlpha(static_cast<int>(i));
+        if (alpha >= 1.0f)
+            opaqueFaces.push_back(i);
+        else
+            transparentFaces.push_back(i);
+    }
 
-
-    // --- 引入任务分块 ---
-    const size_t numThreads = 16; // 假设线程池大小为4，或者可以根据实际情况动态获取
-    const size_t minFacesPerTask = 400; // 每个任务至少处理的面数，这是一个可调参数
-    
-    // 计算要创建的任务数量
-    size_t numTasks = (faceCount + minFacesPerTask - 1) / minFacesPerTask; // 向上取整
-    numTasks = std::min(numTasks, faceCount); // 任务数量不能超过总面数
-    numTasks = std::max(numTasks, numThreads); // 确保至少有线程池数量的任务，以充分利用线程
-
-    size_t facesPerTask = (faceCount + numTasks - 1) / numTasks; // 重新计算每个任务实际处理的面数
+    // 2. 多线程分块渲染非透明面
+    const size_t numThreads = 16;
+    const size_t minFacesPerTask = 400;
+    size_t opaqueCount = opaqueFaces.size();
+    size_t numTasks = (opaqueCount + minFacesPerTask - 1) / minFacesPerTask;
+    numTasks = std::min(numTasks, opaqueCount);
+    numTasks = std::max(numTasks, numThreads);
+    size_t facesPerTask = (opaqueCount + numTasks - 1) / numTasks;
 
     if (m_enableSSAA) {
         Matrix4x4 originalViewport = viewportMatrix;
-        // 保存原始 m_mvpvMatrix，以便恢复
         Matrix4x4 originalMVPV = m_mvpvMatrix;
         viewportMatrix = createHighResViewportMatrix();
-        // 使用高分辨率视口重新计算组合矩阵
         m_mvpvMatrix = viewportMatrix * projectionMatrix * viewMatrix * modelMatrix;
-
-        // 并行处理：按面块提交任务
         for (size_t taskIdx = 0; taskIdx < numTasks; ++taskIdx) {
             size_t startFace = taskIdx * facesPerTask;
-            size_t endFace = std::min(startFace + facesPerTask, faceCount);
-
-            if (startFace >= endFace) continue; // 跳过空块
-
-            m_threadPool->enqueue([this, &model, startFace, endFace]() {
-                for (size_t i = startFace; i < endFace; ++i) {
+            size_t endFace = std::min(startFace + facesPerTask, opaqueCount);
+            if (startFace >= endFace) continue;
+            m_threadPool->enqueue([this, &model, &opaqueFaces, startFace, endFace]() {
+                for (size_t j = startFace; j < endFace; ++j) {
+                    int i = static_cast<int>(opaqueFaces[j]);
                     Vertex v0, v1, v2;
-                    model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-                    renderTriangleHighResWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+                    model.getFaceVertices(i, v0, v1, v2);
+                    renderTriangleHighResWithFaceIdx(v0, v1, v2, i, &model);
                 }
             });
         }
         m_threadPool->waitAll();
-        // 恢复原始视口和组合矩阵
         viewportMatrix = originalViewport;
         m_mvpvMatrix = originalMVPV;
     } else {
-        // 原有路径：支持 MSAA/普通
-       // 非SSAA模式下：按面块提交任务
         for (size_t taskIdx = 0; taskIdx < numTasks; ++taskIdx) {
             size_t startFace = taskIdx * facesPerTask;
-            size_t endFace = std::min(startFace + facesPerTask, faceCount);
-
-            if (startFace >= endFace) continue; // 跳过空块
-
-            m_threadPool->enqueue([this, &model, startFace, endFace]() {
-                for (size_t i = startFace; i < endFace; ++i) {
+            size_t endFace = std::min(startFace + facesPerTask, opaqueCount);
+            if (startFace >= endFace) continue;
+            m_threadPool->enqueue([this, &model, &opaqueFaces, startFace, endFace]() {
+                for (size_t j = startFace; j < endFace; ++j) {
+                    int i = static_cast<int>(opaqueFaces[j]);
                     Vertex v0, v1, v2;
-                    model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-                    renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+                    model.getFaceVertices(i, v0, v1, v2);
+                    renderTriangleWithFaceIdx(v0, v1, v2, i, &model);
                 }
             });
         }
         m_threadPool->waitAll();
+    }
+
+    // 3. 单线程依次渲染所有透明面
+    for (size_t idx = 0; idx < transparentFaces.size(); ++idx) {
+        int i = static_cast<int>(transparentFaces[idx]);
+        Vertex v0, v1, v2;
+        model.getFaceVertices(i, v0, v1, v2);
+        renderTriangleWithFaceIdx(v0, v1, v2, i, &model);
     }
 }
 

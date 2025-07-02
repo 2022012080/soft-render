@@ -105,6 +105,8 @@ public:
     HWND m_backendStatusLabel;
     void UpdateBackendStatus();
     
+    bool m_wasMoving = false;
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
