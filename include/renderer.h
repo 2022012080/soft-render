@@ -204,6 +204,9 @@ public:
     virtual ~Renderer() = default;
     Renderer(int w, int h);
     
+    // 新增：组合后的MVPV矩阵
+    Matrix4x4 m_mvpvMatrix;
+
     // 清空缓冲
     void clear(const Color& color = Color(0, 0, 0));
     void clearDepth();

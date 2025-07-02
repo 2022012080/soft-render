@@ -834,21 +834,15 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             VectorMath::Quaternion yawRotation = VectorMath::Quaternion::fromAxisAngle(Vec3f(0, 1, 0), yawRad);
             m_targetRotation = yawRotation * pitchRotation;
             
-            // 在拖动时使用插值
-            m_cameraRotation = VectorMath::Quaternion::slerp(m_cameraRotation, m_targetRotation, m_rotationLerpSpeed);
-            
+            // 更新摄像机旋转目标，无立即渲染，由定时器统一处理
             UpdateCameraAngleLabel();
-            UpdateRender();
         }
         break;
     }
     case WM_LBUTTONUP:
         if (m_dragging) {
             m_dragging = false;
-            // 在松开鼠标时立即应用目标旋转
-            m_cameraRotation = m_targetRotation;
             ReleaseCapture();
-            UpdateRender();
         }
         break;
     
@@ -1011,6 +1005,9 @@ void RenderWindow::UpdateRender() {
     m_renderer->setViewMatrix(viewMatrix);
     m_renderer->setProjectionMatrix(projectionMatrix);
     m_renderer->setViewportMatrix(viewportMatrix);
+    
+    // 新增：计算并设置组合的MVPV矩阵
+    m_renderer->m_mvpvMatrix = viewportMatrix * projectionMatrix * viewMatrix * modelMatrix;
     
     // 更新多光源系统
     if (m_renderer->getLightCount() >= 3) {
@@ -1681,6 +1678,11 @@ void RenderWindow::UpdateMovement() {
         m_targetPosition = currentTarget;
         needsUpdate = true;
     }
+
+    // 平滑插值相机旋转
+    m_cameraRotation = VectorMath::Quaternion::slerp(m_cameraRotation, m_targetRotation, m_rotationLerpSpeed);
+    UpdateCameraAngleLabel();
+    needsUpdate = true;
 
     if (needsUpdate) {
         // 应用插值移动

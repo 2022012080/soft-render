@@ -122,7 +122,7 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     // 初始化法向量变换矩阵
     updateNormalMatrix();
     
-    m_threadPool = std::make_unique<ThreadPool>(4);
+    m_threadPool = std::make_unique<ThreadPool>(16);
 }
 
 void Renderer::enableSSAA(bool enable, int scale) {
@@ -335,29 +335,58 @@ void Renderer::renderModel(const Model& model) {
     size_t faceCount = model.getFaceCount();
     if (faceCount == 0) return;
 
+
+
+    // --- 引入任务分块 ---
+    const size_t numThreads = 16; // 假设线程池大小为4，或者可以根据实际情况动态获取
+    const size_t minFacesPerTask = 400; // 每个任务至少处理的面数，这是一个可调参数
+    
+    // 计算要创建的任务数量
+    size_t numTasks = (faceCount + minFacesPerTask - 1) / minFacesPerTask; // 向上取整
+    numTasks = std::min(numTasks, faceCount); // 任务数量不能超过总面数
+    numTasks = std::max(numTasks, numThreads); // 确保至少有线程池数量的任务，以充分利用线程
+
+    size_t facesPerTask = (faceCount + numTasks - 1) / numTasks; // 重新计算每个任务实际处理的面数
+
     if (m_enableSSAA) {
         Matrix4x4 originalViewport = viewportMatrix;
         viewportMatrix = createHighResViewportMatrix();
 
-        for (size_t i = 0; i < faceCount; ++i) {
-            m_threadPool->enqueue([this, &model, i]() {
-                Vertex v0, v1, v2;
-                model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-                renderTriangleHighResWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+        // 并行处理：按面块提交任务
+        for (size_t taskIdx = 0; taskIdx < numTasks; ++taskIdx) {
+            size_t startFace = taskIdx * facesPerTask;
+            size_t endFace = std::min(startFace + facesPerTask, faceCount);
+
+            if (startFace >= endFace) continue; // 跳过空块
+
+            m_threadPool->enqueue([this, &model, startFace, endFace]() {
+                for (size_t i = startFace; i < endFace; ++i) {
+                    Vertex v0, v1, v2;
+                    model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+                    renderTriangleHighResWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+                }
             });
         }
         m_threadPool->waitAll();
         viewportMatrix = originalViewport;
     } else {
         // 原有路径：支持 MSAA/普通
-    for (size_t i = 0; i < faceCount; ++i) {
-        m_threadPool->enqueue([this, &model, i]() {
-            Vertex v0, v1, v2;
-            model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
-            renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
-        });
-    }
-    m_threadPool->waitAll();
+       // 非SSAA模式下：按面块提交任务
+        for (size_t taskIdx = 0; taskIdx < numTasks; ++taskIdx) {
+            size_t startFace = taskIdx * facesPerTask;
+            size_t endFace = std::min(startFace + facesPerTask, faceCount);
+
+            if (startFace >= endFace) continue; // 跳过空块
+
+            m_threadPool->enqueue([this, &model, startFace, endFace]() {
+                for (size_t i = startFace; i < endFace; ++i) {
+                    Vertex v0, v1, v2;
+                    model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+                    renderTriangleWithFaceIdx(v0, v1, v2, static_cast<int>(i), &model);
+                }
+            });
+        }
+        m_threadPool->waitAll();
     }
 }
 
@@ -548,6 +577,13 @@ void Renderer::renderTriangleWithFaceIdx(const Vertex& v0, const Vertex& v1, con
     
     if (!isFrontFace(viewPos0, viewPos1, viewPos2)) return;
     
+    // 视锥体剔除：屏幕空间边界框剔除
+    float minX = std::min({sv0.position.x, sv1.position.x, sv2.position.x});
+    float maxX = std::max({sv0.position.x, sv1.position.x, sv2.position.x});
+    float minY = std::min({sv0.position.y, sv1.position.y, sv2.position.y});
+    float maxY = std::max({sv0.position.y, sv1.position.y, sv2.position.y});
+    if (maxX < 0 || minX >= width || maxY < 0 || minY >= height) return;
+    
     // 根据抗锯齿模式选择渲染方法
     if (m_enableMSAA) {
         rasterizeTriangleMSAA(sv0, sv1, sv2, faceIdx, pModel);
@@ -577,11 +613,10 @@ Renderer::ShaderVertex Renderer::vertexShader(const Vertex& vertex) {
         sv.localNormal = (vertex.normal + displacement.normalize() * 0.5f).normalize();
     }
     
-    // 应用变换
-    sv.worldPos = modelMatrix * displacedPosition;
-    Vec3f viewPos = viewMatrix * sv.worldPos;
-    Vec3f clipPos = projectionMatrix * viewPos;
-    sv.position = viewportMatrix * clipPos;
+    // 应用变换 - 使用预乘的MVPV矩阵进行变换
+    // 注意：sv.worldPos 仍然需要单独计算，因为光照可能在世界空间进行
+    sv.worldPos = modelMatrix * displacedPosition; // 仍然需要世界坐标用于光照
+    sv.position = m_mvpvMatrix * displacedPosition; // 使用组合矩阵进行顶点变换
     
     // 变换法向量 - 使用法向量变换矩阵
     sv.normal = (normalMatrix * Vec4f(sv.localNormal, 0.0f)).xyz().normalize();
@@ -892,15 +927,10 @@ void Renderer::updateNormalMatrix() {
 // 绘制线段 - 使用改进的Bresenham算法
 void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color, float width) {
     // 将3D点转换到屏幕坐标
-    Vec3f worldStart = modelMatrix * start;
-    Vec3f worldEnd = modelMatrix * end;
-    Vec3f viewStart = viewMatrix * worldStart;
-    Vec3f viewEnd = viewMatrix * worldEnd;
-    Vec3f clipStart = projectionMatrix * viewStart;
-    Vec3f clipEnd = projectionMatrix * viewEnd;
-    Vec3f screenStart = viewportMatrix * clipStart;
-    Vec3f screenEnd = viewportMatrix * clipEnd;
-    
+    // 新增：使用组合矩阵进行变换
+    Vec3f screenStart = m_mvpvMatrix * start;
+    Vec3f screenEnd = m_mvpvMatrix * end;
+
     int x0 = static_cast<int>(screenStart.x);
     int y0 = static_cast<int>(screenStart.y);
     int x1 = static_cast<int>(screenEnd.x);
@@ -977,18 +1007,13 @@ void Renderer::drawLine(const Vec3f& start, const Vec3f& end, const Color& color
 // 绘制线段到高分辨率缓冲区 - 用于SSAA模式
 void Renderer::drawLineHighRes(const Vec3f& start, const Vec3f& end, const Color& color, float width) {
     // 将3D点转换到屏幕坐标（使用高分辨率视口矩阵）
-    Vec3f worldStart = modelMatrix * start;
-    Vec3f worldEnd = modelMatrix * end;
-    Vec3f viewStart = viewMatrix * worldStart;
-    Vec3f viewEnd = viewMatrix * worldEnd;
-    Vec3f clipStart = projectionMatrix * viewStart;
-    Vec3f clipEnd = projectionMatrix * viewEnd;
-    
-    // 使用高分辨率视口矩阵进行变换
     Matrix4x4 highResViewport = createHighResViewportMatrix();
-    Vec3f screenStart = highResViewport * clipStart;
-    Vec3f screenEnd = highResViewport * clipEnd;
-    
+    // 重新组合一个高分辨率下的MVPV矩阵
+    Matrix4x4 highResMvpVMatrix = highResViewport * projectionMatrix * viewMatrix * modelMatrix;
+
+    Vec3f screenStart = highResMvpVMatrix * start;
+    Vec3f screenEnd = highResMvpVMatrix * end;
+
     int x0 = static_cast<int>(screenStart.x);
     int y0 = static_cast<int>(screenStart.y);
     int x1 = static_cast<int>(screenEnd.x);
@@ -1068,13 +1093,19 @@ void Renderer::drawAxes(float maxLength) {
     Vec3f origin(0, 0, 0);
     int screenW = m_enableSSAA ? m_highResWidth : width;
     int screenH = m_enableSSAA ? m_highResHeight : height;
-    Matrix4x4 vpMat = m_enableSSAA ? createHighResViewportMatrix() : viewportMatrix;
+    
+    // 根据SSAA状态选择正确的MVPV矩阵
+    Matrix4x4 currentMvpvMatrix;
+    if (m_enableSSAA) {
+        Matrix4x4 highResViewport = createHighResViewportMatrix();
+        currentMvpvMatrix = highResViewport * projectionMatrix * viewMatrix * modelMatrix;
+    } else {
+        currentMvpvMatrix = m_mvpvMatrix;
+    }
 
     // 计算原点在屏幕空间的位置
-    Vec3f worldOrigin = modelMatrix * origin;
-    Vec3f viewOrigin = viewMatrix * worldOrigin;
-    Vec3f clipOrigin = projectionMatrix * viewOrigin;
-    Vec3f screenOrigin = vpMat * clipOrigin;
+    Vec3f worldOrigin = modelMatrix * origin; // 仍然需要世界坐标 for now
+    Vec3f screenOrigin = currentMvpvMatrix * origin; // 使用组合矩阵
 
     // 对每个轴进行处理
     for (int axis = 0; axis < 3; axis++) {
@@ -1108,10 +1139,8 @@ void Renderer::drawAxes(float maxLength) {
             // 以较小的步长搜索可见部分
             while (true) {
                 Vec3f endPoint = origin + direction * (currentLength * sign);
-                Vec3f worldEnd = modelMatrix * endPoint;
-                Vec3f viewEnd = viewMatrix * worldEnd;
-                Vec3f clipEnd = projectionMatrix * viewEnd;
-                Vec3f screenEnd = vpMat * clipEnd;
+                // 新增：使用组合矩阵进行变换
+                Vec3f screenEnd = currentMvpvMatrix * endPoint;
 
                 // 检查点是否在屏幕内
                 bool inScreen = screenEnd.x >= 0 && screenEnd.x < screenW && 
@@ -1159,7 +1188,15 @@ void Renderer::drawAxes(float maxLength) {
 void Renderer::drawGrid(float size, int divisions) {
     int screenW = m_enableSSAA ? m_highResWidth : width;
     int screenH = m_enableSSAA ? m_highResHeight : height;
-    Matrix4x4 vpMat = m_enableSSAA ? createHighResViewportMatrix() : viewportMatrix;
+
+    // 根据SSAA状态选择正确的MVPV矩阵
+    Matrix4x4 currentMvpvMatrix;
+    if (m_enableSSAA) {
+        Matrix4x4 highResViewport = createHighResViewportMatrix();
+        currentMvpvMatrix = highResViewport * projectionMatrix * viewMatrix * modelMatrix;
+    } else {
+        currentMvpvMatrix = m_mvpvMatrix;
+    }
     Color gridColor(128, 128, 128, 128); // 半透明灰色
 
     // 在X方向和Z方向上绘制网格线
@@ -1183,10 +1220,8 @@ void Renderer::drawGrid(float size, int divisions) {
             // 向一个方向搜索
             while (true) {
                 Vec3f endPoint = lineBase + direction * currentLength;
-                Vec3f worldEnd = modelMatrix * endPoint;
-                Vec3f viewEnd = viewMatrix * worldEnd;
-                Vec3f clipEnd = projectionMatrix * viewEnd;
-                Vec3f screenEnd = vpMat * clipEnd;
+                // 新增：使用组合矩阵进行变换
+                Vec3f screenEnd = currentMvpvMatrix * endPoint;
 
                 bool inScreen = screenEnd.x >= 0 && screenEnd.x < screenW && 
                               screenEnd.y >= 0 && screenEnd.y < screenH;
@@ -1244,10 +1279,8 @@ void Renderer::drawGrid(float size, int divisions) {
 
             while (true) {
                 Vec3f endPoint = lineBase - direction * currentLength;
-                Vec3f worldEnd = modelMatrix * endPoint;
-                Vec3f viewEnd = viewMatrix * worldEnd;
-                Vec3f clipEnd = projectionMatrix * viewEnd;
-                Vec3f screenEnd = vpMat * clipEnd;
+                // 新增：使用组合矩阵进行变换
+                Vec3f screenEnd = currentMvpvMatrix * endPoint;
 
                 bool inScreen = screenEnd.x >= 0 && screenEnd.x < screenW && 
                               screenEnd.y >= 0 && screenEnd.y < screenH;
@@ -1313,14 +1346,10 @@ void Renderer::drawAllLightPositions() {
 
 // 绘制单个光源位置
 void Renderer::drawSingleLightPosition(const Light& light, int lightIndex) {
-    // 将光源位置从本地坐标系变换到世界坐标系
-    Vec3f worldLightPos = modelMatrix * light.position;
-    
-    // 将世界坐标的光源位置转换到屏幕坐标
-    Vec3f viewLightPos = viewMatrix * worldLightPos;
-    Vec3f clipLightPos = projectionMatrix * viewLightPos;
-    Vec3f screenLightPos = viewportMatrix * clipLightPos;
-    
+    // 将光源位置从本地坐标系变换到屏幕坐标
+    // 新增：使用组合矩阵进行变换
+    Vec3f screenLightPos = m_mvpvMatrix * light.position;
+
     int lx = static_cast<int>(screenLightPos.x);
     int ly = static_cast<int>(screenLightPos.y);
     float lz = screenLightPos.z;
@@ -2085,6 +2114,13 @@ void Renderer::renderTriangleHighResWithFaceIdx(const Vertex& v0, const Vertex& 
     Vec3f viewPos1  = viewMatrix * worldPos1;
     Vec3f viewPos2  = viewMatrix * worldPos2;
     if (!isFrontFace(viewPos0, viewPos1, viewPos2)) return;
+
+    // 视锥体剔除：高分辨率屏幕空间边界框剔除
+    float minX = std::min({sv0.position.x, sv1.position.x, sv2.position.x});
+    float maxX = std::max({sv0.position.x, sv1.position.x, sv2.position.x});
+    float minY = std::min({sv0.position.y, sv1.position.y, sv2.position.y});
+    float maxY = std::max({sv0.position.y, sv1.position.y, sv2.position.y});
+    if (maxX < 0 || minX >= m_highResWidth || maxY < 0 || minY >= m_highResHeight) return;
 
     rasterizeTriangleHighResWithFaceIdx(sv0, sv1, sv2, faceIdx, pModel);
     if (m_drawTriangleEdges) {
