@@ -45,6 +45,7 @@ RenderWindow::RenderWindow(int width, int height)
     , m_moveLerpSpeed(0.15f)
     , m_isMoving(false)
     , m_fpsLabel(nullptr)
+    , m_wasMoving(false) // 需在构造函数初始化
 {
     // 初始化键盘状态数组
     memset(m_keyStates, 0, sizeof(m_keyStates));
@@ -833,8 +834,10 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
             VectorMath::Quaternion pitchRotation = VectorMath::Quaternion::fromAxisAngle(Vec3f(1, 0, 0), pitchRad);
             VectorMath::Quaternion yawRotation = VectorMath::Quaternion::fromAxisAngle(Vec3f(0, 1, 0), yawRad);
             m_targetRotation = yawRotation * pitchRotation;
-            
-            // 更新摄像机旋转目标，无立即渲染，由定时器统一处理
+
+            // 新增：拖动时实时刷新画面
+            UpdateRender();
+
             UpdateCameraAngleLabel();
         }
         break;
@@ -982,7 +985,7 @@ void RenderWindow::UpdateRender() {
     // 摄像机位置和朝向
     Vec3f cameraPos = m_cameraPos;
     // 使用球面插值平滑过渡到目标旋转
-    m_cameraRotation = VectorMath::Quaternion::slerp(m_cameraRotation, m_targetRotation, m_rotationLerpSpeed);
+    m_cameraRotation = m_targetRotation;
     
     // 获取旋转矩阵
     Matrix4x4 rotationMatrix = m_cameraRotation.toMatrix();
@@ -1621,8 +1624,7 @@ void RenderWindow::StopMoveTimer() {
 }
 
 void RenderWindow::UpdateMovement() {
-    bool needsUpdate = false;
-    float moveStep = m_moveSpeed * MOVE_TIMER_INTERVAL / 1000.0f * 40.0f;
+    float moveStep = m_moveSpeed * MOVE_TIMER_INTERVAL / 1000.0f * 4.0f;
 
     // 获取当前摄像机的朝向
     Matrix4x4 rotationMatrix = m_cameraRotation.toMatrix();
@@ -1637,70 +1639,71 @@ void RenderWindow::UpdateMovement() {
                          m_keyStates['A'] || m_keyStates['D'] || 
                          (m_keyStates[VK_SPACE] && (m_keyStates['W'] || m_keyStates['S']));
 
+    Vec3f oldPos(m_objectX, m_objectY, m_objectZ);
+    Vec3f newPos = oldPos;
+    bool positionChanged = false;
+
     if (!anyMovementKey) {
-        // 如果没有按键按下，停止移动插值
         m_isMoving = false;
-        m_targetPosition = Vec3f(m_objectX, m_objectY, m_objectZ);
-        needsUpdate = true;
+        m_targetPosition = oldPos;
     } else {
-        // 计算目标位置
         Vec3f currentTarget(m_targetPosition.x, m_targetPosition.y, m_targetPosition.z);
         m_isMoving = true;
 
-    if (m_keyStates['W']) {
+        if (m_keyStates['W']) {
             if (m_keyStates[VK_SPACE]) {
                 currentTarget.y += moveStep;
-        } else {
+            } else {
                 currentTarget.x -= forward.x * moveStep;
                 currentTarget.y -= forward.y * moveStep;
                 currentTarget.z -= forward.z * moveStep;
+            }
         }
-    }
-    if (m_keyStates['S']) {
+        if (m_keyStates['S']) {
             if (m_keyStates[VK_SPACE]) {
                 currentTarget.y -= moveStep;
-        } else {
+            } else {
                 currentTarget.x += forward.x * moveStep;
                 currentTarget.y += forward.y * moveStep;
                 currentTarget.z += forward.z * moveStep;
+            }
         }
-    }
-    if (m_keyStates['A']) {
+        if (m_keyStates['A']) {
             currentTarget.x += right.x * moveStep;
             currentTarget.y += right.y * moveStep;
             currentTarget.z += right.z * moveStep;
-    }
-    if (m_keyStates['D']) {
+        }
+        if (m_keyStates['D']) {
             currentTarget.x -= right.x * moveStep;
             currentTarget.y -= right.y * moveStep;
             currentTarget.z -= right.z * moveStep;
         }
 
         m_targetPosition = currentTarget;
-        needsUpdate = true;
-    }
 
-    // 平滑插值相机旋转
-    m_cameraRotation = VectorMath::Quaternion::slerp(m_cameraRotation, m_targetRotation, m_rotationLerpSpeed);
-    UpdateCameraAngleLabel();
-    needsUpdate = true;
-
-    if (needsUpdate) {
-        // 应用插值移动
-        if (m_isMoving) {
-            Vec3f currentPos(m_objectX, m_objectY, m_objectZ);
-            Vec3f newPos = VectorMath::lerp(currentPos, m_targetPosition, m_moveLerpSpeed);
+        newPos = VectorMath::lerp(oldPos, m_targetPosition, m_moveLerpSpeed);
+        if (newPos.x != oldPos.x || newPos.y != oldPos.y || newPos.z != oldPos.z) {
             m_objectX = newPos.x;
             m_objectY = newPos.y;
             m_objectZ = newPos.z;
+            positionChanged = true;
         }
+    }
 
-        // 更新编辑框显示的值
+    m_cameraRotation = m_targetRotation;
+    UpdateCameraAngleLabel();
+
+    if (positionChanged) {
+        UpdateRender();
+    }
+
+    // 只有在移动刚刚结束时才刷新输入框内容
+    if (m_wasMoving && !anyMovementKey) {
         SetWindowTextA(m_objectXEdit, std::to_string(m_objectX).c_str());
         SetWindowTextA(m_objectYEdit, std::to_string(m_objectY).c_str());
         SetWindowTextA(m_objectZEdit, std::to_string(m_objectZ).c_str());
-        UpdateRender();
     }
+    m_wasMoving = anyMovementKey;
 }
 
 void RenderWindow::UpdateCameraAngleLabel() {

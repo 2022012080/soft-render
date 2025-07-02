@@ -338,7 +338,7 @@ private:
     void StopMoveTimer();
     void UpdateMovement();
     static const int MOVE_TIMER_ID = 1;
-    static const int MOVE_TIMER_INTERVAL = 16; // ~60fps
+    static const int MOVE_TIMER_INTERVAL = 16; // ~250fps
     bool m_keyStates[256];
     float m_moveSpeed;
     
