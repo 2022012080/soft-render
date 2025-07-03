@@ -2253,12 +2253,14 @@ void Renderer::generateShadowMap(const Model& model) {
     Vec3f up(0,1,0);
     if (fabs(lightDir.y) > 0.99f) up = Vec3f(1,0,0);
 
-    // 首先计算模型在世界空间中的包围盒
+    // 修改：使用固定的世界坐标系，而不是依赖于当前视角的模型变换
+    // 计算模型在固定世界空间中的包围盒（不使用modelMatrix）
     float worldMinX=FLT_MAX, worldMinY=FLT_MAX, worldMinZ=FLT_MAX;
     float worldMaxX=-FLT_MAX, worldMaxY=-FLT_MAX, worldMaxZ=-FLT_MAX;
     const auto &allVerts = model.getVertices();
     for (const auto &v : allVerts) {
-        Vec3f wp = modelMatrix * v.position;
+        // 使用模型的原始坐标，不应用modelMatrix
+        Vec3f wp = v.position;
         worldMinX = std::min(worldMinX, wp.x); worldMaxX = std::max(worldMaxX, wp.x);
         worldMinY = std::min(worldMinY, wp.y); worldMaxY = std::max(worldMaxY, wp.y);
         worldMinZ = std::min(worldMinZ, wp.z); worldMaxZ = std::max(worldMaxZ, wp.z);
@@ -2291,7 +2293,8 @@ void Renderer::generateShadowMap(const Model& model) {
     float minX=FLT_MAX,minY=FLT_MAX,minZ=FLT_MAX;
     float maxX=-FLT_MAX,maxY=-FLT_MAX,maxZ=-FLT_MAX;
     for (const auto &v : allVerts) {
-        Vec3f wp = modelMatrix * v.position;
+        // 修改：使用模型的原始坐标，不应用modelMatrix
+        Vec3f wp = v.position;
         Vec3f lp = m_lightViewMatrix * wp; // 到光源视空间
         minX = std::min(minX, lp.x); maxX = std::max(maxX, lp.x);
         minY = std::min(minY, lp.y); maxY = std::max(maxY, lp.y);
@@ -2324,10 +2327,10 @@ void Renderer::generateShadowMap(const Model& model) {
         Vertex v0, v1, v2;
         model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
 
-        // 计算世界坐标
-        Vec3f w0 = modelMatrix * v0.position;
-        Vec3f w1 = modelMatrix * v1.position;
-        Vec3f w2 = modelMatrix * v2.position;
+        // 修改：使用模型的原始坐标，不应用modelMatrix
+        Vec3f w0 = v0.position;
+        Vec3f w1 = v1.position;
+        Vec3f w2 = v2.position;
 
         // 转换到光源NDC
         Vec3f p0 = m_lightViewProjMatrix * w0;
@@ -2407,7 +2410,12 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
         std::cout << "[Shadow Debug] isInShadow called " << totalCalls << " times, shadowed=" << shadowedCalls << std::endl;
     }
 
-    Vec3f lp = m_lightViewProjMatrix * worldPos;
+    // 修改：worldPos已经是经过modelMatrix变换的世界坐标，但阴影映射是基于原始模型坐标的
+    // 需要将worldPos转换回原始模型坐标系
+    Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
+    Vec3f localPos = invModelMatrix * worldPos;
+    
+    Vec3f lp = m_lightViewProjMatrix * localPos;
 
     // 转到[0,1]
     float sx = lp.x * 0.5f + 0.5f;
