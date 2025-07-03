@@ -836,7 +836,7 @@ Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, 
 
         // 阴影判断（仅对方向光应用）
         if (m_enableShadowMapping && isInShadow(worldPos)) {
-            shadowFactor = 0.1f; // retain slight ambient in shadowed area
+            shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
             ++m_debugShadowInShadowCount;
             
             // 调试信息：每100次阴影应用输出一次
@@ -1575,7 +1575,7 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
         
         // 阴影判断（仅对方向光应用）
         if (m_enableShadowMapping && isInShadow(worldPos)) {
-            shadowFactor = 0.1f; // retain slight ambient in shadowed area
+            shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
             ++m_debugShadowInShadowCount;
             
             // 调试信息：每100次阴影应用输出一次
@@ -2422,15 +2422,16 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
     float sy = lp.y * 0.5f + 0.5f;
     float sz = lp.z * 0.5f + 0.5f;
 
-    if (sx < 0 || sx > 1 || sy < 0 || sy > 1) return false;
+    // 修改：如果坐标超出范围，说明该点不在光源视锥体内，应该被认为是阴影区域
+    if (sx < 0 || sx > 1 || sy < 0 || sy > 1) return true;
 
     int x = static_cast<int>(sx * (m_shadowMapSize - 1));
     int y = static_cast<int>(sy * (m_shadowMapSize - 1));
     int idx = y * m_shadowMapSize + x;
-    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return false;
+    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return true;
 
     // 深度偏移避免阴影伪影
-    const float bias = 0.01f; // 增加偏差值，因为深度范围较大
+    const float bias = 0.005f; // 减小偏差值，避免过度阴影
     bool shadowed = (sz - bias) > m_shadowDepthMap[idx];
     
     // 调试信息：每1000次调用输出一次统计
