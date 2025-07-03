@@ -2275,7 +2275,7 @@ void Renderer::generateShadowMap(const Model& model) {
     float modelRadius = std::max({worldMaxX - worldMinX, worldMaxY - worldMinY, worldMaxZ - worldMinZ}) * 0.5f;
     
     // 设置光源位置：从模型中心沿光源方向偏移足够距离
-    float lightDistance = modelRadius * 3.0f; // 确保光源足够远
+    float lightDistance = modelRadius * 0.01f; // 确保光源足够远
     Vec3f eye = modelCenter - lightDir * lightDistance;
     Vec3f center = modelCenter; // 光源看向模型中心
 
