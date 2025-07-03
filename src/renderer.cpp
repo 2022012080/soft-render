@@ -2449,7 +2449,6 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
                       << " shadowDepth=" << m_shadowDepthMap[idx] << " shadowed=" << shadowed << std::endl;
         }
     }
-    
     return !shadowed;
 }
 
