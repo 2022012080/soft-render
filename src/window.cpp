@@ -353,6 +353,10 @@ void RenderWindow::CreateControls() {
     m_toggleAxesGridBtn = CreateWindowA("BUTTON", "Grid", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1400, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_AXES_GRID, GetModuleHandle(nullptr), nullptr);
     
+    // Shadow toggle button (placed to the right of Grid button)
+    m_toggleShadowBtn = CreateWindowA("BUTTON", "Shad", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1445, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SHADOW, GetModuleHandle(nullptr), nullptr);
+    
     // SSAA controls
     CreateWindowA("STATIC", "SSAA:", WS_VISIBLE | WS_CHILD,
         1220, 395, 40, 15, m_hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
@@ -711,6 +715,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnDisplacementChanged();
             } else if (controlId == ID_TOGGLE_EMISSION) {
                 OnEmissionChanged();
+            } else if (controlId == ID_TOGGLE_SHADOW) {
+                OnToggleShadow();
             }
         }
         return 0;
@@ -1752,4 +1758,11 @@ void RenderWindow::ToggleBackend() {
 
 void RenderWindow::UpdateBackendStatus() {
     SetWindowTextA(m_backendStatusLabel, "Backend: CPU");
-} 
+}
+
+void RenderWindow::OnToggleShadow() {
+    bool currentState = m_renderer->isShadowMappingEnabled();
+    std::cout << "[UI] Shadow toggle clicked. newState=" << (!currentState) << std::endl;
+    m_renderer->enableShadowMapping(!currentState);
+    UpdateRender();
+}

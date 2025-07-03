@@ -123,6 +123,12 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     updateNormalMatrix();
     
     m_threadPool = std::make_unique<ThreadPool>(16);
+
+    // 阴影映射初始化
+    m_enableShadowMapping = false;
+    m_shadowDebugCounter = 0;
+    m_shadowMapSize = 512;
+    m_shadowDepthMap.resize(m_shadowMapSize * m_shadowMapSize, 1.0f);
 }
 
 void Renderer::enableSSAA(bool enable, int scale) {
@@ -332,6 +338,13 @@ void Renderer::clearDepth() {
 }
 
 void Renderer::renderModel(const Model& model) {
+    // 在主渲染前，先生成阴影图
+    generateShadowMap(model);
+
+    if (m_shadowDebugCounter > 0) {
+        std::cout << "[Shadow] Rendering main scene (debug frame " << (4 - m_shadowDebugCounter) << ")" << std::endl;
+    }
+
     size_t faceCount = model.getFaceCount();
     if (faceCount == 0) return;
 
@@ -399,6 +412,23 @@ void Renderer::renderModel(const Model& model) {
         Vertex v0, v1, v2;
         model.getFaceVertices(i, v0, v1, v2);
         renderTriangleWithFaceIdx(v0, v1, v2, i, &model);
+    }
+
+    // 输出调试统计
+    if (m_shadowDebugCounter > 0) {
+        if (m_debugShadowSampleCount > 0) {
+            float shadowRatio = (float)m_debugShadowInShadowCount / (float)m_debugShadowSampleCount;
+            std::cout << "[Shadow] pixels tested=" << m_debugShadowSampleCount
+                      << " inShadow=" << m_debugShadowInShadowCount
+                      << " ratio=" << shadowRatio << std::endl;
+        }
+        m_debugShadowSampleCount = 0;
+        m_debugShadowInShadowCount = 0;
+    }
+
+    // 渲染结束后减少调试帧计数
+    if (m_shadowDebugCounter > 0) {
+        --m_shadowDebugCounter;
     }
 }
 
@@ -794,54 +824,58 @@ Vec3f Renderer::calculateLighting(const Vec3f& localPos, const Vec3f& localNorma
 }
 
 Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
+    Vec3f worldPos = modelMatrix * localPos; // 计算世界坐标（用于阴影检查）
     Vec3f lightDir;
     float attenuation;
-    
+    float shadowFactor = 1.0f;
+
     if (light.type == LightType::DIRECTIONAL) {
         // 平面光源：使用固定方向，无距离衰减
         lightDir = -light.position.normalize();  // 光源position作为方向向量，取反得到光照方向
         attenuation = light.intensity;  // 平面光源无距离衰减
+
+        // 阴影判断（仅对方向光应用）
+        if (m_enableShadowMapping && isInShadow(worldPos)) {
+            shadowFactor = 0.1f; // retain slight ambient in shadowed area
+            ++m_debugShadowInShadowCount;
+            
+            // 调试信息：每100次阴影应用输出一次
+            static int shadowApplyCount = 0;
+            shadowApplyCount++;
+            if (shadowApplyCount == 1) {
+                std::cout << "[Shadow Debug] Shadow factor applied for the first time!" << std::endl;
+            }
+            if (shadowApplyCount % 100 == 0) {
+                std::cout << "[Shadow Debug] Shadow factor applied " << shadowApplyCount << " times" << std::endl;
+            }
+        }
     } else {
         // 点光源：原有逻辑
         Vec3f lightVector = light.position - localPos;
         float distance = lightVector.length();
         lightDir = lightVector.normalize();
-        
-        // 计算标准距离衰减（I/r²）
         float r_squared = distance * distance;
         attenuation = light.intensity / r_squared;
     }
-    
+
     // 漫反射光照（Lambert模型） - 使用本地坐标系的法向量
     float diffuseIntensity = std::max(0.0f, localNormal.dot(lightDir));
-    Vec3f diffuse = baseColor * light.color * diffuseIntensity * attenuation * this->diffuseStrength;
-    
+    Vec3f diffuse = baseColor * light.color * diffuseIntensity * attenuation * this->diffuseStrength * shadowFactor;
+
     // 高光计算 - 只有当表面面向光源时才计算
     Vec3f specular(0, 0, 0);
-    if (diffuseIntensity > 0.0f) {  // 只有面向光源的表面才有高光
-        // 正确的视角方向计算：直接将摄像机位置变换到物体本地坐标系
-        // 1. 获取摄像机在世界坐标系的位置
-        Vec3f worldCameraPos = VectorMath::inverse(viewMatrix) * Vec3f(0, 0, 0);
-        
-        // 2. 将摄像机位置变换到物体本地坐标系
+    if (diffuseIntensity > 0.0f) {
+        Vec3f worldCameraPos = VectorMath::inverse(viewMatrix) * Vec3f(0,0,0);
         Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
         Vec3f localCameraPos = invModelMatrix * worldCameraPos;
-        
-        // 3. 在本地坐标系中计算视角方向（从表面点指向摄像机）
         Vec3f localViewDir = (localCameraPos - localPos).normalize();
-        
-        // 镜面反射光照（Phong模型）
         Vec3f reflectDir = localNormal * (2.0f * localNormal.dot(lightDir)) - lightDir;
         reflectDir = reflectDir.normalize();
-        
-        // 使用可调节的高光指数
         float specularIntensity = std::pow(std::max(0.0f, localViewDir.dot(reflectDir)), this->shininess);
-        
-        // 增加镜面反射系数
-        float Ks = 0.5f;  // 从0.5增加到1.0
-        specular = light.color * Ks * attenuation * specularIntensity * this->specularStrength;
+        float Ks = 0.5f;
+        specular = light.color * Ks * attenuation * specularIntensity * this->specularStrength * shadowFactor;
     }
-    
+
     return diffuse + specular;
 }
 
@@ -1529,13 +1563,31 @@ Vec3f Renderer::calculateBRDFLighting(const Vec3f& localPos, const Vec3f& localN
 }
 
 Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor) {
+    Vec3f worldPos = modelMatrix * localPos; // 计算世界坐标（用于阴影检查）
     Vec3f L;  // 光照方向
     float distance;
+    float shadowFactor = 1.0f; // 阴影因子
     
     if (light.type == LightType::DIRECTIONAL) {
         // 平面光源：使用固定方向
         L = -light.position.normalize();  // 光源position作为方向向量，取反得到光照方向
         distance = 1.0f;  // 平面光源无距离概念，设为1避免除零
+        
+        // 阴影判断（仅对方向光应用）
+        if (m_enableShadowMapping && isInShadow(worldPos)) {
+            shadowFactor = 0.1f; // retain slight ambient in shadowed area
+            ++m_debugShadowInShadowCount;
+            
+            // 调试信息：每100次阴影应用输出一次
+            static int shadowApplyCount = 0;
+            shadowApplyCount++;
+            if (shadowApplyCount == 1) {
+                std::cout << "[Shadow Debug] BRDF Shadow factor applied for the first time!" << std::endl;
+            }
+            if (shadowApplyCount % 100 == 0) {
+                std::cout << "[Shadow Debug] BRDF Shadow factor applied " << shadowApplyCount << " times" << std::endl;
+            }
+        }
     } else {
         // 点光源：原有逻辑
         Vec3f lightVector = light.position - localPos;
@@ -1599,7 +1651,7 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
     
     // 最终颜色
     Vec3f radiance = light.color * attenuation;
-    Vec3f color = (diffuse + specular + energyCompensation) * radiance * NdotL;
+    Vec3f color = (diffuse + specular + energyCompensation) * radiance * NdotL * shadowFactor;
     
     // BRDF 不使用 Blinn-Phong 的 diffuseStrength 系数
     // BRDF 本身已经包含正确的能量分配，不需要额外缩放
@@ -2145,4 +2197,253 @@ void Renderer::resolveSSAAToFrameBuffer() {
     if (!m_enableSSAA) return;
     downsampleFromHighRes();
 }
+
+//==============  阴影映射实现  ===================
+Matrix4x4 Renderer::orthographic(float left, float right, float bottom, float top, float near, float far) {
+    Matrix4x4 ortho;
+    ortho(0,0) = 2.0f / (right - left);
+    ortho(1,1) = 2.0f / (top - bottom);
+    ortho(2,2) = -2.0f / (far - near);
+    ortho(0,3) = -(right + left) / (right - left);
+    ortho(1,3) = -(top + bottom) / (top - bottom);
+    ortho(2,3) = -(far + near) / (far - near);
+    return ortho;
+}
+
+void Renderer::enableShadowMapping(bool enable) {
+    if (enable == m_enableShadowMapping) return;
+    m_enableShadowMapping = enable;
+    m_shadowDebugCounter = 3; // 切换后输出前三帧调试信息
+    std::cout << (enable ? "[Shadow] Shadow mapping enabled" : "[Shadow] Shadow mapping disabled") << std::endl;
+}
+
+void Renderer::generateShadowMap(const Model& model) {
+    if (!m_enableShadowMapping) return;
+
+    if (m_shadowDebugCounter > 0) {
+        std::cout << "[Shadow] Generating shadow map (debug frames left=" << m_shadowDebugCounter << ")" << std::endl;
+    }
+
+    // 打印当前方向光状态
+    if (lights.size() >= 3) {
+        const Light &d = lights[2];
+        std::cout << "[Shadow] DirLight enabled=" << d.enabled << " intensity=" << d.intensity
+                  << " dir=(" << d.position.x << "," << d.position.y << "," << d.position.z << ")" << std::endl;
+    }
+
+    // 清空深度贴图
+    std::fill(m_shadowDepthMap.begin(), m_shadowDepthMap.end(), 1.0f);
+
+    // 计算光源矩阵（仅针对第三个光源，假设其存在且为方向光）
+    if (lights.size() < 3) {
+        if (m_shadowDebugCounter > 0) {
+            std::cout << "[Shadow Debug] Not enough lights: " << lights.size() << " < 3" << std::endl;
+        }
+        return;
+    }
+    const Light& dirLight = lights[2];
+    if (dirLight.type != LightType::DIRECTIONAL) {
+        if (m_shadowDebugCounter > 0) {
+            std::cout << "[Shadow Debug] Light[2] is not directional: type=" << (int)dirLight.type << std::endl;
+        }
+        return;
+    }
+
+    Vec3f lightDir = (-dirLight.position).normalize();
+    Vec3f up(0,1,0);
+    if (fabs(lightDir.y) > 0.99f) up = Vec3f(1,0,0);
+
+    // 首先计算模型在世界空间中的包围盒
+    float worldMinX=FLT_MAX, worldMinY=FLT_MAX, worldMinZ=FLT_MAX;
+    float worldMaxX=-FLT_MAX, worldMaxY=-FLT_MAX, worldMaxZ=-FLT_MAX;
+    const auto &allVerts = model.getVertices();
+    for (const auto &v : allVerts) {
+        Vec3f wp = modelMatrix * v.position;
+        worldMinX = std::min(worldMinX, wp.x); worldMaxX = std::max(worldMaxX, wp.x);
+        worldMinY = std::min(worldMinY, wp.y); worldMaxY = std::max(worldMaxY, wp.y);
+        worldMinZ = std::min(worldMinZ, wp.z); worldMaxZ = std::max(worldMaxZ, wp.z);
+    }
+    
+    // 计算模型中心点
+    Vec3f modelCenter((worldMinX + worldMaxX) * 0.5f, 
+                      (worldMinY + worldMaxY) * 0.5f, 
+                      (worldMinZ + worldMaxZ) * 0.5f);
+    
+    // 计算模型的最大半径
+    float modelRadius = std::max({worldMaxX - worldMinX, worldMaxY - worldMinY, worldMaxZ - worldMinZ}) * 0.5f;
+    
+    // 设置光源位置：从模型中心沿光源方向偏移足够距离
+    float lightDistance = modelRadius * 3.0f; // 确保光源足够远
+    Vec3f eye = modelCenter - lightDir * lightDistance;
+    Vec3f center = modelCenter; // 光源看向模型中心
+
+    m_lightViewMatrix = VectorMath::lookAt(eye, center, up);
+    
+    if (m_shadowDebugCounter > 0) {
+        std::cout << "[Shadow Debug] Light direction: (" << lightDir.x << ", " << lightDir.y << ", " << lightDir.z << ")" << std::endl;
+        std::cout << "[Shadow Debug] Model center: (" << modelCenter.x << ", " << modelCenter.y << ", " << modelCenter.z << ")" << std::endl;
+        std::cout << "[Shadow Debug] Model radius: " << modelRadius << std::endl;
+        std::cout << "[Shadow Debug] Light eye position: (" << eye.x << ", " << eye.y << ", " << eye.z << ")" << std::endl;
+        std::cout << "[Shadow Debug] Light intensity: " << dirLight.intensity << std::endl;
+    }
+    
+    // 重新计算光源视空间中的包围盒
+    float minX=FLT_MAX,minY=FLT_MAX,minZ=FLT_MAX;
+    float maxX=-FLT_MAX,maxY=-FLT_MAX,maxZ=-FLT_MAX;
+    for (const auto &v : allVerts) {
+        Vec3f wp = modelMatrix * v.position;
+        Vec3f lp = m_lightViewMatrix * wp; // 到光源视空间
+        minX = std::min(minX, lp.x); maxX = std::max(maxX, lp.x);
+        minY = std::min(minY, lp.y); maxY = std::max(maxY, lp.y);
+        minZ = std::min(minZ, lp.z); maxZ = std::max(maxZ, lp.z);
+    }
+    // 增加边距，确保模型完全在视锥体内
+    float margin = std::max({maxX - minX, maxY - minY, maxZ - minZ}) * 0.1f; // 10%的边距
+    margin = std::max(margin, 0.1f); // 最小边距
+    
+    m_lightProjMatrix = orthographic(minX-margin, maxX+margin,
+                                     minY-margin, maxY+margin,
+                                     minZ-margin, maxZ+margin);
+
+    // 计算完整的视图投影矩阵
+    m_lightViewProjMatrix = m_lightProjMatrix * m_lightViewMatrix;
+
+    if (m_shadowDebugCounter>0){
+        std::cout << "[Shadow] Ortho bounds LRTBNF:" << minX << ","<<maxX<<","<<minY<<","<<maxY<<","<<minZ<<","<<maxZ<< std::endl;
+        std::cout << "[Shadow Debug] Margin: " << margin << std::endl;
+        std::cout << "[Shadow Debug] Light view matrix calculated" << std::endl;
+    }
+
+    size_t faceCount = model.getFaceCount();
+    if (m_shadowDebugCounter > 0) {
+        std::cout << "[Shadow Debug] Processing " << faceCount << " faces" << std::endl;
+    }
+    
+    int processedFaces = 0;
+    for (size_t i = 0; i < faceCount; ++i) {
+        Vertex v0, v1, v2;
+        model.getFaceVertices(static_cast<int>(i), v0, v1, v2);
+
+        // 计算世界坐标
+        Vec3f w0 = modelMatrix * v0.position;
+        Vec3f w1 = modelMatrix * v1.position;
+        Vec3f w2 = modelMatrix * v2.position;
+
+        // 转换到光源NDC
+        Vec3f p0 = m_lightViewProjMatrix * w0;
+        Vec3f p1 = m_lightViewProjMatrix * w1;
+        Vec3f p2 = m_lightViewProjMatrix * w2;
+
+        // NDC -> 屏幕
+        auto toScreen = [this](const Vec3f& p){
+            return Vec3f(
+                (p.x * 0.5f + 0.5f) * (m_shadowMapSize - 1),
+                (p.y * 0.5f + 0.5f) * (m_shadowMapSize - 1),
+                p.z * 0.5f + 0.5f);
+        };
+
+        Vec3f s0 = toScreen(p0);
+        Vec3f s1 = toScreen(p1);
+        Vec3f s2 = toScreen(p2);
+
+        // 计算包围盒
+        int minX = std::max(0, static_cast<int>(std::floor(std::min({s0.x, s1.x, s2.x}))));
+        int maxX = std::min(m_shadowMapSize - 1, static_cast<int>(std::ceil(std::max({s0.x, s1.x, s2.x}))));
+        int minY = std::max(0, static_cast<int>(std::floor(std::min({s0.y, s1.y, s2.y}))));
+        int maxY = std::min(m_shadowMapSize - 1, static_cast<int>(std::ceil(std::max({s0.y, s1.y, s2.y}))));
+
+        // 调试：检查三角形是否在阴影贴图范围内
+        if (m_shadowDebugCounter > 0 && processedFaces < 5) {
+            std::cout << "[Shadow Debug] Face " << i << " screen bounds: X[" << minX << "," << maxX << "] Y[" << minY << "," << maxY << "]" << std::endl;
+            std::cout << "[Shadow Debug] Face " << i << " NDC coords: (" << p0.x << "," << p0.y << "," << p0.z << ") (" << p1.x << "," << p1.y << "," << p1.z << ") (" << p2.x << "," << p2.y << "," << p2.z << ")" << std::endl;
+        }
+
+        for (int y = minY; y <= maxY; ++y) {
+            for (int x = minX; x <= maxX; ++x) {
+                Vec2f p(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f);
+                Vec3f bary = barycentric(Vec2f(s0.x, s0.y), Vec2f(s1.x, s1.y), Vec2f(s2.x, s2.y), p);
+                if (bary.x >= 0 && bary.y >= 0 && bary.z >= 0) {
+                    float depth = bary.x * s0.z + bary.y * s1.z + bary.z * s2.z;
+                    int idx = y * m_shadowMapSize + x;
+                    if (depth < m_shadowDepthMap[idx]) {
+                        m_shadowDepthMap[idx] = depth;
+                    }
+                }
+            }
+        }
+        processedFaces++;
+    }
+    
+    if (m_shadowDebugCounter > 0) {
+        std::cout << "[Shadow Debug] Processed " << processedFaces << " faces total" << std::endl;
+    }
+
+    if (m_shadowDebugCounter > 0) {
+        // 统计深度图填充值
+        float minDepth = 1.0f, maxDepth = 0.0f;
+        int filledPixels = 0;
+        for (float d : m_shadowDepthMap) {
+            if (d < minDepth) minDepth = d;
+            if (d > maxDepth && d < 1.0f) maxDepth = d;
+            if (d < 1.0f) filledPixels++;
+        }
+        std::cout << "[Shadow] Depth range after pass: min=" << minDepth << " max=" << maxDepth << std::endl;
+        std::cout << "[Shadow Debug] Filled pixels: " << filledPixels << "/" << m_shadowDepthMap.size() 
+                  << " (" << (float)filledPixels/m_shadowDepthMap.size()*100 << "%)" << std::endl;
+    }
+}
+
+bool Renderer::isInShadow(const Vec3f& worldPos) const {
+    if (!m_enableShadowMapping) return false;
+    
+    // 调试：检查函数是否被调用
+    static int totalCalls = 0;
+    static int shadowedCalls = 0;
+    totalCalls++;
+    if (totalCalls == 1) {
+        std::cout << "[Shadow Debug] isInShadow function is being called!" << std::endl;
+    }
+    if (totalCalls % 10000 == 0) {
+        std::cout << "[Shadow Debug] isInShadow called " << totalCalls << " times, shadowed=" << shadowedCalls << std::endl;
+    }
+
+    Vec3f lp = m_lightViewProjMatrix * worldPos;
+
+    // 转到[0,1]
+    float sx = lp.x * 0.5f + 0.5f;
+    float sy = lp.y * 0.5f + 0.5f;
+    float sz = lp.z * 0.5f + 0.5f;
+
+    if (sx < 0 || sx > 1 || sy < 0 || sy > 1) return false;
+
+    int x = static_cast<int>(sx * (m_shadowMapSize - 1));
+    int y = static_cast<int>(sy * (m_shadowMapSize - 1));
+    int idx = y * m_shadowMapSize + x;
+    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return false;
+
+    // 深度偏移避免阴影伪影
+    const float bias = 0.01f; // 增加偏差值，因为深度范围较大
+    bool shadowed = (sz - bias) > m_shadowDepthMap[idx];
+    
+    // 调试信息：每1000次调用输出一次统计
+    static int callCount = 0;
+    static int shadowedCount = 0;
+    callCount++;
+    if (shadowed) {
+        shadowedCount++;
+        shadowedCalls++; // 更新全局计数器
+    }
+    if (callCount % 1000 == 0) {
+        std::cout << "[Shadow Debug] isInShadow calls=" << callCount << " shadowed=" << shadowedCount 
+                  << " ratio=" << (float)shadowedCount/callCount << std::endl;
+        // 输出一些深度比较的详细信息
+        if (callCount % 10000 == 0) {
+            std::cout << "[Shadow Debug] Sample depth comparison: sz=" << sz << " bias=" << bias 
+                      << " shadowDepth=" << m_shadowDepthMap[idx] << " shadowed=" << shadowed << std::endl;
+        }
+    }
+    
+    return shadowed;
+}
+//==============  阴影映射实现结束  ===================
 

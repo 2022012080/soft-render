@@ -107,6 +107,9 @@ public:
     
     bool m_wasMoving = false;
     
+    // 新增：阴影控制方法
+    void OnToggleShadow();
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -147,6 +150,9 @@ private:
     
     // 新增：法线贴图控制按钮
     HWND m_toggleNormalMapBtn;
+    
+    // 新增：阴影映射控制按钮
+    HWND m_toggleShadowBtn;
     
     // 新增：坐标轴和网格线控制按钮
     HWND m_toggleAxesGridBtn;
@@ -256,6 +262,9 @@ private:
     
     // 新增：法线贴图控制ID
     static const int ID_TOGGLE_NORMAL_MAP = 1038;
+    
+    // 新增：阴影映射控制ID
+    static const int ID_TOGGLE_SHADOW = 1060;
     
     // 新增：坐标轴和网格线控制ID
     static const int ID_TOGGLE_AXES_GRID = 1030;
