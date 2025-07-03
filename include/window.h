@@ -110,6 +110,9 @@ public:
     // 新增：阴影控制方法
     void OnToggleShadow();
     
+    // 新增：深度图输出方法
+    void OnExportDepthMap();
+    
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -153,6 +156,9 @@ private:
     
     // 新增：阴影映射控制按钮
     HWND m_toggleShadowBtn;
+    
+    // 新增：深度图输出按钮
+    HWND m_exportDepthMapBtn;
     
     // 新增：坐标轴和网格线控制按钮
     HWND m_toggleAxesGridBtn;
@@ -265,6 +271,9 @@ private:
     
     // 新增：阴影映射控制ID
     static const int ID_TOGGLE_SHADOW = 1060;
+    
+    // 新增：深度图输出控制ID
+    static const int ID_EXPORT_DEPTH_MAP = 1061;
     
     // 新增：坐标轴和网格线控制ID
     static const int ID_TOGGLE_AXES_GRID = 1030;

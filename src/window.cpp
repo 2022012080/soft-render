@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 
 RenderWindow::RenderWindow(int width, int height) 
     : m_windowWidth(width), m_windowHeight(height)
@@ -356,6 +357,10 @@ void RenderWindow::CreateControls() {
     // Shadow toggle button (placed to the right of Grid button)
     m_toggleShadowBtn = CreateWindowA("BUTTON", "Shad", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         1445, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_TOGGLE_SHADOW, GetModuleHandle(nullptr), nullptr);
+    
+    // Depth map export button (placed to the right of Shadow button)
+    m_exportDepthMapBtn = CreateWindowA("BUTTON", "Depth", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        1490, 365, 40, 25, m_hwnd, (HMENU)(LONG_PTR)ID_EXPORT_DEPTH_MAP, GetModuleHandle(nullptr), nullptr);
     
     // SSAA controls
     CreateWindowA("STATIC", "SSAA:", WS_VISIBLE | WS_CHILD,
@@ -717,6 +722,8 @@ LRESULT RenderWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 OnEmissionChanged();
             } else if (controlId == ID_TOGGLE_SHADOW) {
                 OnToggleShadow();
+            } else if (controlId == ID_EXPORT_DEPTH_MAP) {
+                OnExportDepthMap();
             }
         }
         return 0;
@@ -1765,4 +1772,27 @@ void RenderWindow::OnToggleShadow() {
     std::cout << "[UI] Shadow toggle clicked. newState=" << (!currentState) << std::endl;
     m_renderer->enableShadowMapping(!currentState);
     UpdateRender();
+}
+
+void RenderWindow::OnExportDepthMap() {
+    if (!m_renderer->isShadowMappingEnabled()) {
+        MessageBoxA(m_hwnd, "Please enable shadow mapping first!", "Warning", MB_ICONWARNING);
+        return;
+    }
+    
+    // Generate filename with timestamp
+    time_t now = time(0);
+    struct tm* ltm = localtime(&now);
+    char filename[256];
+    sprintf_s(filename, sizeof(filename), "depth_map_%04d%02d%02d_%02d%02d%02d.bmp",
+             1900 + ltm->tm_year, 1 + ltm->tm_mon, ltm->tm_mday,
+             ltm->tm_hour, ltm->tm_min, ltm->tm_sec);
+    
+    if (m_renderer->saveDepthMap(filename)) {
+        char message[512];
+        sprintf_s(message, sizeof(message), "Depth map saved to: %s", filename);
+        MessageBoxA(m_hwnd, message, "Success", MB_ICONINFORMATION);
+    } else {
+        MessageBoxA(m_hwnd, "Failed to save depth map!", "Error", MB_ICONERROR);
+    }
 }

@@ -381,6 +381,9 @@ public:
     // 工具：正交投影矩阵
     static Matrix4x4 orthographic(float left, float right, float bottom, float top, float near, float far);
     
+    // 新增：保存深度图
+    bool saveDepthMap(const std::string& filename) const;
+    
 private:
     // 顶点着色器
     struct ShaderVertex {

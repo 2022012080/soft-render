@@ -2410,8 +2410,6 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
         std::cout << "[Shadow Debug] isInShadow called " << totalCalls << " times, shadowed=" << shadowedCalls << std::endl;
     }
 
-    // 修改：worldPos已经是经过modelMatrix变换的世界坐标，但阴影映射是基于原始模型坐标的
-    // 需要将worldPos转换回原始模型坐标系
     Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
     Vec3f localPos = invModelMatrix * worldPos;
     
@@ -2428,10 +2426,10 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
     int x = static_cast<int>(sx * (m_shadowMapSize - 1));
     int y = static_cast<int>(sy * (m_shadowMapSize - 1));
     int idx = y * m_shadowMapSize + x;
-    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return true;
+    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return false;
 
     // 深度偏移避免阴影伪影
-    const float bias = 0.005f; // 减小偏差值，避免过度阴影
+    const float bias = 0.001f; // 减小偏差值，避免过度阴影
     bool shadowed = (sz - bias) > m_shadowDepthMap[idx];
     
     // 调试信息：每1000次调用输出一次统计
@@ -2452,7 +2450,97 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
         }
     }
     
-    return shadowed;
+    return !shadowed;
+}
+
+bool Renderer::saveDepthMap(const std::string& filename) const {
+    if (!m_enableShadowMapping) {
+        std::cout << "[Depth Map] Shadow mapping is not enabled!" << std::endl;
+        return false;
+    }
+    
+    std::ofstream file(filename, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Cannot create depth map file: " << filename << std::endl;
+        return false;
+    }
+    
+    // BMP文件头
+    int fileSize = 54 + m_shadowMapSize * m_shadowMapSize * 3;
+    int dataOffset = 54;
+    
+    // 写入BMP文件头
+    file.write("BM", 2);
+    file.write(reinterpret_cast<const char*>(&fileSize), 4);
+    file.write("\0\0\0\0", 4);
+    file.write(reinterpret_cast<const char*>(&dataOffset), 4);
+    
+    // 信息头
+    int infoHeaderSize = 40;
+    file.write(reinterpret_cast<const char*>(&infoHeaderSize), 4);
+    file.write(reinterpret_cast<const char*>(&m_shadowMapSize), 4);
+    file.write(reinterpret_cast<const char*>(&m_shadowMapSize), 4);
+    
+    short planes = 1;
+    short bitsPerPixel = 24;
+    file.write(reinterpret_cast<const char*>(&planes), 2);
+    file.write(reinterpret_cast<const char*>(&bitsPerPixel), 2);
+    
+    int compression = 0;
+    int imageSize = m_shadowMapSize * m_shadowMapSize * 3;
+    file.write(reinterpret_cast<const char*>(&compression), 4);
+    file.write(reinterpret_cast<const char*>(&imageSize), 4);
+    
+    int xPixelsPerM = 0;
+    int yPixelsPerM = 0;
+    file.write(reinterpret_cast<const char*>(&xPixelsPerM), 4);
+    file.write(reinterpret_cast<const char*>(&yPixelsPerM), 4);
+    
+    int colorsUsed = 0;
+    int importantColors = 0;
+    file.write(reinterpret_cast<const char*>(&colorsUsed), 4);
+    file.write(reinterpret_cast<const char*>(&importantColors), 4);
+    
+    // 找到深度范围
+    float minDepth = 1.0f, maxDepth = 0.0f;
+    for (float d : m_shadowDepthMap) {
+        if (d < minDepth) minDepth = d;
+        if (d > maxDepth && d < 1.0f) maxDepth = d;
+    }
+    
+    // 写入像素数据（BMP是倒置的）
+    for (int y = m_shadowMapSize - 1; y >= 0; y--) {
+        for (int x = 0; x < m_shadowMapSize; x++) {
+            int idx = y * m_shadowMapSize + x;
+            float depth = m_shadowDepthMap[idx];
+            
+            // 将深度值转换为灰度
+            unsigned char gray;
+            if (depth >= 1.0f) {
+                gray = 0; // 未填充的区域为黑色
+            } else {
+                // 将深度值映射到0-255
+                float normalizedDepth = (depth - minDepth) / (maxDepth - minDepth);
+                gray = static_cast<unsigned char>(normalizedDepth * 255.0f);
+            }
+            
+            // BMP格式：BGR
+            file.write(reinterpret_cast<const char*>(&gray), 1); // B
+            file.write(reinterpret_cast<const char*>(&gray), 1); // G
+            file.write(reinterpret_cast<const char*>(&gray), 1); // R
+        }
+        
+        // 行对齐
+        int padding = (4 - (m_shadowMapSize * 3) % 4) % 4;
+        for (int i = 0; i < padding; i++) {
+            file.write("\0", 1);
+        }
+    }
+    
+    file.close();
+    std::cout << "[Depth Map] Saved depth map to: " << filename << std::endl;
+    std::cout << "[Depth Map] Depth range: " << minDepth << " to " << maxDepth << std::endl;
+    return true;
 }
 //==============  阴影映射实现结束  ===================
 
