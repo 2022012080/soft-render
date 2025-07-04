@@ -1771,6 +1771,10 @@ void RenderWindow::OnToggleShadow() {
     bool currentState = m_renderer->isShadowMappingEnabled();
     std::cout << "[UI] Shadow toggle clicked. newState=" << (!currentState) << std::endl;
     m_renderer->enableShadowMapping(!currentState);
+    // 如果启用了阴影映射，请求重新生成阴影图
+    if (!currentState) {
+        m_renderer->requestShadowMapRegeneration();
+    }
     UpdateRender();
 }
 

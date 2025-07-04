@@ -202,8 +202,9 @@ private:
     
     // --- Shadow Mapping ---
     bool m_enableShadowMapping = false;           // 阴影映射开关
+    bool m_shadowMapDirty = false;                // 阴影图是否需要重新生成
     int  m_shadowDebugCounter = 0;               // 调试帧计数器（切换后输出前三帧）
-    int  m_shadowMapSize = 512;                  // 阴影图分辨率
+    int  m_shadowMapSize = 1024;                 // 阴影图分辨率
     std::vector<float> m_shadowDepthMap;         // 深度贴图
     Matrix4x4 m_lightViewMatrix;                 // 光源视图矩阵
     Matrix4x4 m_lightProjMatrix;                 // 光源投影矩阵
@@ -373,6 +374,7 @@ public:
     // 阴影控制接口
     void enableShadowMapping(bool enable);
     bool isShadowMappingEnabled() const { return m_enableShadowMapping; }
+    void requestShadowMapRegeneration() { m_shadowMapDirty = true; } // 请求重新生成阴影图
 
     // --- 阴影实现函数 ---
     void generateShadowMap(const Model& model);

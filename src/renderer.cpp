@@ -126,8 +126,9 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
 
     // 阴影映射初始化
     m_enableShadowMapping = false;
+    m_shadowMapDirty = false;  // 初始化时阴影图不需要重新生成
     m_shadowDebugCounter = 0;
-    m_shadowMapSize = 512;
+    m_shadowMapSize = 1024;
     m_shadowDepthMap.resize(m_shadowMapSize * m_shadowMapSize, 1.0f);
 }
 
@@ -338,8 +339,11 @@ void Renderer::clearDepth() {
 }
 
 void Renderer::renderModel(const Model& model) {
-    // 在主渲染前，先生成阴影图
-    generateShadowMap(model);
+    // 只在阴影映射启用且阴影图需要重新生成时才生成阴影图
+    if (m_enableShadowMapping && m_shadowMapDirty) {
+        generateShadowMap(model);
+        m_shadowMapDirty = false; // 标记阴影图已更新
+    }
 
     if (m_shadowDebugCounter > 0) {
         std::cout << "[Shadow] Rendering main scene (debug frame " << (4 - m_shadowDebugCounter) << ")" << std::endl;
@@ -1574,19 +1578,9 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
         distance = 1.0f;  // 平面光源无距离概念，设为1避免除零
         
         // 阴影判断（仅对方向光应用）
-        if (m_enableShadowMapping && isInShadow(worldPos)) {
+        if (m_enableShadowMapping && isInShadow(localPos)) {
             shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
             ++m_debugShadowInShadowCount;
-            
-            // 调试信息：每100次阴影应用输出一次
-            static int shadowApplyCount = 0;
-            shadowApplyCount++;
-            if (shadowApplyCount == 1) {
-                std::cout << "[Shadow Debug] BRDF Shadow factor applied for the first time!" << std::endl;
-            }
-            if (shadowApplyCount % 100 == 0) {
-                std::cout << "[Shadow Debug] BRDF Shadow factor applied " << shadowApplyCount << " times" << std::endl;
-            }
         }
     } else {
         // 点光源：原有逻辑
@@ -1981,6 +1975,12 @@ Vec3f Renderer::calculateSingleLightWithParams(const Light& light, const Vec3f& 
     if (light.type == LightType::DIRECTIONAL) {
         lightDir = -light.position.normalize();
         attenuation = light.intensity;
+
+        // 阴影判断（仅对方向光应用）
+        if (m_enableShadowMapping && isInShadow(localPos)) {
+            shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
+            ++m_debugShadowInShadowCount;
+        }
     } else {
         Vec3f lightVector = light.position - localPos;
         float distance = lightVector.length();
@@ -2213,22 +2213,18 @@ Matrix4x4 Renderer::orthographic(float left, float right, float bottom, float to
 void Renderer::enableShadowMapping(bool enable) {
     if (enable == m_enableShadowMapping) return;
     m_enableShadowMapping = enable;
+    m_shadowMapDirty = true; // 标记需要重新生成阴影图
     m_shadowDebugCounter = 3; // 切换后输出前三帧调试信息
     std::cout << (enable ? "[Shadow] Shadow mapping enabled" : "[Shadow] Shadow mapping disabled") << std::endl;
 }
 
 void Renderer::generateShadowMap(const Model& model) {
-    if (!m_enableShadowMapping) return;
 
-    if (m_shadowDebugCounter > 0) {
-        std::cout << "[Shadow] Generating shadow map (debug frames left=" << m_shadowDebugCounter << ")" << std::endl;
-    }
+    if (!m_enableShadowMapping) return;
 
     // 打印当前方向光状态
     if (lights.size() >= 3) {
         const Light &d = lights[2];
-        std::cout << "[Shadow] DirLight enabled=" << d.enabled << " intensity=" << d.intensity
-                  << " dir=(" << d.position.x << "," << d.position.y << "," << d.position.z << ")" << std::endl;
     }
 
     // 清空深度贴图
@@ -2236,16 +2232,10 @@ void Renderer::generateShadowMap(const Model& model) {
 
     // 计算光源矩阵（仅针对第三个光源，假设其存在且为方向光）
     if (lights.size() < 3) {
-        if (m_shadowDebugCounter > 0) {
-            std::cout << "[Shadow Debug] Not enough lights: " << lights.size() << " < 3" << std::endl;
-        }
         return;
     }
     const Light& dirLight = lights[2];
     if (dirLight.type != LightType::DIRECTIONAL) {
-        if (m_shadowDebugCounter > 0) {
-            std::cout << "[Shadow Debug] Light[2] is not directional: type=" << (int)dirLight.type << std::endl;
-        }
         return;
     }
 
@@ -2281,14 +2271,6 @@ void Renderer::generateShadowMap(const Model& model) {
 
     m_lightViewMatrix = VectorMath::lookAt(eye, center, up);
     
-    if (m_shadowDebugCounter > 0) {
-        std::cout << "[Shadow Debug] Light direction: (" << lightDir.x << ", " << lightDir.y << ", " << lightDir.z << ")" << std::endl;
-        std::cout << "[Shadow Debug] Model center: (" << modelCenter.x << ", " << modelCenter.y << ", " << modelCenter.z << ")" << std::endl;
-        std::cout << "[Shadow Debug] Model radius: " << modelRadius << std::endl;
-        std::cout << "[Shadow Debug] Light eye position: (" << eye.x << ", " << eye.y << ", " << eye.z << ")" << std::endl;
-        std::cout << "[Shadow Debug] Light intensity: " << dirLight.intensity << std::endl;
-    }
-    
     // 重新计算光源视空间中的包围盒
     float minX=FLT_MAX,minY=FLT_MAX,minZ=FLT_MAX;
     float maxX=-FLT_MAX,maxY=-FLT_MAX,maxZ=-FLT_MAX;
@@ -2311,16 +2293,7 @@ void Renderer::generateShadowMap(const Model& model) {
     // 计算完整的视图投影矩阵
     m_lightViewProjMatrix = m_lightProjMatrix * m_lightViewMatrix;
 
-    if (m_shadowDebugCounter>0){
-        std::cout << "[Shadow] Ortho bounds LRTBNF:" << minX << ","<<maxX<<","<<minY<<","<<maxY<<","<<minZ<<","<<maxZ<< std::endl;
-        std::cout << "[Shadow Debug] Margin: " << margin << std::endl;
-        std::cout << "[Shadow Debug] Light view matrix calculated" << std::endl;
-    }
-
     size_t faceCount = model.getFaceCount();
-    if (m_shadowDebugCounter > 0) {
-        std::cout << "[Shadow Debug] Processing " << faceCount << " faces" << std::endl;
-    }
     
     int processedFaces = 0;
     for (size_t i = 0; i < faceCount; ++i) {
@@ -2355,12 +2328,6 @@ void Renderer::generateShadowMap(const Model& model) {
         int minY = std::max(0, static_cast<int>(std::floor(std::min({s0.y, s1.y, s2.y}))));
         int maxY = std::min(m_shadowMapSize - 1, static_cast<int>(std::ceil(std::max({s0.y, s1.y, s2.y}))));
 
-        // 调试：检查三角形是否在阴影贴图范围内
-        if (m_shadowDebugCounter > 0 && processedFaces < 5) {
-            std::cout << "[Shadow Debug] Face " << i << " screen bounds: X[" << minX << "," << maxX << "] Y[" << minY << "," << maxY << "]" << std::endl;
-            std::cout << "[Shadow Debug] Face " << i << " NDC coords: (" << p0.x << "," << p0.y << "," << p0.z << ") (" << p1.x << "," << p1.y << "," << p1.z << ") (" << p2.x << "," << p2.y << "," << p2.z << ")" << std::endl;
-        }
-
         for (int y = minY; y <= maxY; ++y) {
             for (int x = minX; x <= maxX; ++x) {
                 Vec2f p(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f);
@@ -2390,68 +2357,53 @@ void Renderer::generateShadowMap(const Model& model) {
             if (d > maxDepth && d < 1.0f) maxDepth = d;
             if (d < 1.0f) filledPixels++;
         }
-        std::cout << "[Shadow] Depth range after pass: min=" << minDepth << " max=" << maxDepth << std::endl;
-        std::cout << "[Shadow Debug] Filled pixels: " << filledPixels << "/" << m_shadowDepthMap.size() 
-                  << " (" << (float)filledPixels/m_shadowDepthMap.size()*100 << "%)" << std::endl;
     }
 }
 
 bool Renderer::isInShadow(const Vec3f& worldPos) const {
     if (!m_enableShadowMapping) return false;
     
-    // 调试：检查函数是否被调用
-    static int totalCalls = 0;
-    static int shadowedCalls = 0;
-    totalCalls++;
-    if (totalCalls == 1) {
-        std::cout << "[Shadow Debug] isInShadow function is being called!" << std::endl;
-    }
-    if (totalCalls % 10000 == 0) {
-        std::cout << "[Shadow Debug] isInShadow called " << totalCalls << " times, shadowed=" << shadowedCalls << std::endl;
-    }
-
-    // 修复：将世界坐标转换回原始模型坐标，与阴影图生成保持一致
+    // 修复：将世界坐标转换回原始模型坐标，与generateShadowMap保持一致
+    // generateShadowMap使用原始模型坐标计算光源矩阵，所以这里需要逆变换
     Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
-    Vec3f originalPos = invModelMatrix * worldPos;
-    
+    //Vec3f originalPos = invModelMatrix * worldPos;
+    Vec3f originalPos = worldPos;
     // 使用原始坐标进行光源变换，与generateShadowMap保持一致
-    Vec3f lp = m_lightViewProjMatrix * originalPos;
+    Vec3f lp = m_lightViewProjMatrix * worldPos;
 
     // 转到[0,1]
     float sx = lp.x * 0.5f + 0.5f;
     float sy = lp.y * 0.5f + 0.5f;
     float sz = lp.z * 0.5f + 0.5f;
 
-    // 修改：如果坐标超出范围，说明该点不在光源视锥体内，应该被认为是阴影区域
-    if (sx < 0 || sx > 1 || sy < 0 || sy > 1) return true;
+    // 改进边界处理：使用更宽松的边界检查
+    if (sx < -0.1f || sx > 1.1f || sy < -0.1f || sy > 1.1f) {
+        return true;
+    }
 
-    int x = static_cast<int>(sx * (m_shadowMapSize - 1));
-    int y = static_cast<int>(sy * (m_shadowMapSize - 1));
+    // 改进坐标计算：使用更精确的坐标映射
+    float x_float = sx * (m_shadowMapSize - 1);
+    float y_float = sy * (m_shadowMapSize - 1);
+    
+    // 边界检查
+    if (x_float < 0 || x_float >= m_shadowMapSize || y_float < 0 || y_float >= m_shadowMapSize) {
+        return true;
+    }
+    
+    int x = static_cast<int>(x_float);
+    int y = static_cast<int>(y_float);
     int idx = y * m_shadowMapSize + x;
-    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return false;
+    
+    // 安全检查
+    if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) {
+        return false;
+    }
 
-    // 深度偏移避免阴影伪影
-    const float bias = 0.005f; // 减小偏差值，避免过度阴影
+    // 深度偏移避免阴影伪影 - 增大bias值减少阴影伪影
+    const float bias = 0.005f; // 增大偏差值，减少阴影伪影
     bool shadowed = (sz - bias) > m_shadowDepthMap[idx];
     
-    // 调试信息：每1000次调用输出一次统计
-    static int callCount = 0;
-    static int shadowedCount = 0;
-    callCount++;
-    if (shadowed) {
-        shadowedCount++;
-        shadowedCalls++; // 更新全局计数器
-    }
-    if (callCount % 1000 == 0) {
-        std::cout << "[Shadow Debug] isInShadow calls=" << callCount << " shadowed=" << shadowedCount 
-                  << " ratio=" << (float)shadowedCount/callCount << std::endl;
-        // 输出一些深度比较的详细信息
-        if (callCount % 10000 == 0) {
-            std::cout << "[Shadow Debug] Sample depth comparison: sz=" << sz << " bias=" << bias 
-                      << " shadowDepth=" << m_shadowDepthMap[idx] << " shadowed=" << shadowed << std::endl;
-        }
-    }
-    return !shadowed; // 修复：返回正确的阴影状态
+    return !shadowed; // 保持原有返回值逻辑
 }
 
 bool Renderer::saveDepthMap(const std::string& filename) const {
@@ -2520,9 +2472,9 @@ bool Renderer::saveDepthMap(const std::string& filename) const {
             if (depth >= 1.0f) {
                 gray = 0; // 未填充的区域为黑色
             } else {
-                // 将深度值映射到0-255
+                // 将深度值映射到0-255，反转方向：近处白色，远处黑色
                 float normalizedDepth = (depth - minDepth) / (maxDepth - minDepth);
-                gray = static_cast<unsigned char>(normalizedDepth * 255.0f);
+                gray = static_cast<unsigned char>((1.0f - normalizedDepth) * 255.0f);
             }
             
             // BMP格式：BGR
