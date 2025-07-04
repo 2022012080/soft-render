@@ -128,7 +128,7 @@ Renderer::Renderer(int w, int h) : width(w), height(h) {
     m_enableShadowMapping = false;
     m_shadowMapDirty = false;  // 初始化时阴影图不需要重新生成
     m_shadowDebugCounter = 0;
-    m_shadowMapSize = 1024;
+    m_shadowMapSize = 4096;
     m_shadowDepthMap.resize(m_shadowMapSize * m_shadowMapSize, 1.0f);
 }
 

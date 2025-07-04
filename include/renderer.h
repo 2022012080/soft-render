@@ -204,7 +204,7 @@ private:
     bool m_enableShadowMapping = false;           // 阴影映射开关
     bool m_shadowMapDirty = false;                // 阴影图是否需要重新生成
     int  m_shadowDebugCounter = 0;               // 调试帧计数器（切换后输出前三帧）
-    int  m_shadowMapSize = 1024;                 // 阴影图分辨率
+    int  m_shadowMapSize = 4096;                 // 阴影图分辨率
     std::vector<float> m_shadowDepthMap;         // 深度贴图
     Matrix4x4 m_lightViewMatrix;                 // 光源视图矩阵
     Matrix4x4 m_lightProjMatrix;                 // 光源投影矩阵
