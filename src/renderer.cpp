@@ -839,19 +839,9 @@ Vec3f Renderer::calculateSingleLight(const Light& light, const Vec3f& localPos, 
         attenuation = light.intensity;  // 平面光源无距离衰减
 
         // 阴影判断（仅对方向光应用）
-        if (m_enableShadowMapping && isInShadow(worldPos)) {
+        if (m_enableShadowMapping && !isInShadow(localPos)) {
             shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
             ++m_debugShadowInShadowCount;
-            
-            // 调试信息：每100次阴影应用输出一次
-            static int shadowApplyCount = 0;
-            shadowApplyCount++;
-            if (shadowApplyCount == 1) {
-                std::cout << "[Shadow Debug] Shadow factor applied for the first time!" << std::endl;
-            }
-            if (shadowApplyCount % 100 == 0) {
-                std::cout << "[Shadow Debug] Shadow factor applied " << shadowApplyCount << " times" << std::endl;
-            }
         }
     } else {
         // 点光源：原有逻辑
@@ -1578,7 +1568,7 @@ Vec3f Renderer::calculateSingleLightBRDF(const Light& light, const Vec3f& localP
         distance = 1.0f;  // 平面光源无距离概念，设为1避免除零
         
         // 阴影判断（仅对方向光应用）
-        if (m_enableShadowMapping && isInShadow(localPos)) {
+        if (m_enableShadowMapping && !isInShadow(localPos)) {
             shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
             ++m_debugShadowInShadowCount;
         }
@@ -1972,12 +1962,14 @@ Vec3f Renderer::calculateLightingWithParams(const Vec3f& localPos, const Vec3f& 
 Vec3f Renderer::calculateSingleLightWithParams(const Light& light, const Vec3f& localPos, const Vec3f& localNormal, const Vec3f& baseColor, const Vec3f& kd, const Vec3f& ks) {
     Vec3f lightDir;
     float attenuation;
+    float shadowFactor = 1.0f;
+
     if (light.type == LightType::DIRECTIONAL) {
         lightDir = -light.position.normalize();
         attenuation = light.intensity;
 
         // 阴影判断（仅对方向光应用）
-        if (m_enableShadowMapping && isInShadow(localPos)) {
+        if (m_enableShadowMapping && !isInShadow(localPos)) {
             shadowFactor = 0.3f; // 增加阴影区域的亮度，避免过度黑暗
             ++m_debugShadowInShadowCount;
         }
@@ -1990,7 +1982,7 @@ Vec3f Renderer::calculateSingleLightWithParams(const Light& light, const Vec3f& 
     }
     float diffuseIntensity = std::max(0.0f, localNormal.dot(lightDir));
     Vec3f diffuse = baseColor * light.color * diffuseIntensity * attenuation;
-    diffuse = Vec3f(diffuse.x * kd.x, diffuse.y * kd.y, diffuse.z * kd.z);
+    diffuse = Vec3f(diffuse.x * kd.x, diffuse.y * kd.y, diffuse.z * kd.z)  * shadowFactor;
     Vec3f specular(0, 0, 0);
     if (diffuseIntensity > 0.0f) {
         Vec3f worldCameraPos = VectorMath::inverse(viewMatrix) * Vec3f(0, 0, 0);
@@ -2001,7 +1993,7 @@ Vec3f Renderer::calculateSingleLightWithParams(const Light& light, const Vec3f& 
         reflectDir = reflectDir.normalize();
         float specularIntensity = std::pow(std::max(0.0f, localViewDir.dot(reflectDir)), this->shininess);
         specular = light.color * specularIntensity * attenuation;
-        specular = Vec3f(specular.x * ks.x, specular.y * ks.y, specular.z * ks.z);
+        specular = Vec3f(specular.x * ks.x, specular.y * ks.y, specular.z * ks.z)  * shadowFactor;
     }
     return diffuse + specular;
 }
