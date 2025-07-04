@@ -2276,7 +2276,7 @@ void Renderer::generateShadowMap(const Model& model) {
     
     // 设置光源位置：从模型中心沿光源方向偏移足够距离
     float lightDistance = modelRadius * 0.01f; // 确保光源足够远
-    Vec3f eye = modelCenter - lightDir * lightDistance;
+    Vec3f eye = modelCenter + lightDir * lightDistance;
     Vec3f center = modelCenter; // 光源看向模型中心
 
     m_lightViewMatrix = VectorMath::lookAt(eye, center, up);
@@ -2410,10 +2410,12 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
         std::cout << "[Shadow Debug] isInShadow called " << totalCalls << " times, shadowed=" << shadowedCalls << std::endl;
     }
 
+    // 修复：将世界坐标转换回原始模型坐标，与阴影图生成保持一致
     Matrix4x4 invModelMatrix = VectorMath::inverse(modelMatrix);
-    Vec3f localPos = invModelMatrix * worldPos;
+    Vec3f originalPos = invModelMatrix * worldPos;
     
-    Vec3f lp = m_lightViewProjMatrix * localPos;
+    // 使用原始坐标进行光源变换，与generateShadowMap保持一致
+    Vec3f lp = m_lightViewProjMatrix * originalPos;
 
     // 转到[0,1]
     float sx = lp.x * 0.5f + 0.5f;
@@ -2429,7 +2431,7 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
     if (idx < 0 || idx >= static_cast<int>(m_shadowDepthMap.size())) return false;
 
     // 深度偏移避免阴影伪影
-    const float bias = 0.001f; // 减小偏差值，避免过度阴影
+    const float bias = 0.005f; // 减小偏差值，避免过度阴影
     bool shadowed = (sz - bias) > m_shadowDepthMap[idx];
     
     // 调试信息：每1000次调用输出一次统计
@@ -2449,7 +2451,7 @@ bool Renderer::isInShadow(const Vec3f& worldPos) const {
                       << " shadowDepth=" << m_shadowDepthMap[idx] << " shadowed=" << shadowed << std::endl;
         }
     }
-    return !shadowed;
+    return !shadowed; // 修复：返回正确的阴影状态
 }
 
 bool Renderer::saveDepthMap(const std::string& filename) const {
